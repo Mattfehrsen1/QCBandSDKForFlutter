@@ -1,5 +1,11 @@
 <!-- Task Need to be Complete -->
 
+Priorty High
+
+1. Check if we have to use native sdks directly or we can use the parsing as done in ble_sdk
+
+---
+
 1. Connect the QC Band Device.
 2. setTime Option
 3. readBatterySuccess
