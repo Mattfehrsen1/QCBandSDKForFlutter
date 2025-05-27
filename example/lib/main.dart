@@ -1,63 +1,94 @@
-import 'package:flutter/material.dart';
+// Copyright 2017-2023, Charles Weinberger & Paul DeMarco.
+// All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+
 import 'dart:async';
 
-import 'package:flutter/services.dart';
-import 'package:qc_band_sdk_for_flutter/qc_band_sdk_for_flutter.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+import 'screens/bluetooth_off_screen.dart';
+import 'screens/scan_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  FlutterBluePlus.setLogLevel(LogLevel.verbose, color: true);
+  runApp(const FlutterBlueApp());
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+//
+// This widget shows BluetoothOffScreen or
+// ScanScreen depending on the adapter state
+//
+class FlutterBlueApp extends StatefulWidget {
+  const FlutterBlueApp({Key? key}) : super(key: key);
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<FlutterBlueApp> createState() => _FlutterBlueAppState();
 }
 
-class _MyAppState extends State<MyApp> {
-  String _platformVersion = 'Unknown';
-  final _qcBandSdkForFlutterPlugin = QcBandSdkForFlutter();
+class _FlutterBlueAppState extends State<FlutterBlueApp> {
+  BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
+
+  late StreamSubscription<BluetoothAdapterState> _adapterStateStateSubscription;
 
   @override
   void initState() {
     super.initState();
-    initPlatformState();
-  }
-
-  // Platform messages are asynchronous, so we initialize in an async method.
-  Future<void> initPlatformState() async {
-    String platformVersion;
-    // Platform messages may fail, so we use a try/catch PlatformException.
-    // We also handle the message potentially returning null.
-    try {
-      platformVersion =
-          await _qcBandSdkForFlutterPlugin.getPlatformVersion() ?? 'Unknown platform version';
-    } on PlatformException {
-      platformVersion = 'Failed to get platform version.';
-    }
-
-    // If the widget was removed from the tree while the asynchronous platform
-    // message was in flight, we want to discard the reply rather than calling
-    // setState to update our non-existent appearance.
-    if (!mounted) return;
-
-    setState(() {
-      _platformVersion = platformVersion;
+    _adapterStateStateSubscription =
+        FlutterBluePlus.adapterState.listen((state) {
+      _adapterState = state;
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
   @override
+  void dispose() {
+    _adapterStateStateSubscription.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    Widget screen = _adapterState == BluetoothAdapterState.on
+        ? const ScanScreen()
+        : BluetoothOffScreen(adapterState: _adapterState);
+
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Plugin example app'),
-        ),
-        body: Center(
-          child: Text('Running on: $_platformVersion\n'),
-        ),
-      ),
+      color: Colors.lightBlue,
+      home: screen,
+      navigatorObservers: [BluetoothAdapterStateObserver()],
     );
+  }
+}
+
+//
+// This observer listens for Bluetooth Off and dismisses the DeviceScreen
+//
+class BluetoothAdapterStateObserver extends NavigatorObserver {
+  StreamSubscription<BluetoothAdapterState>? _adapterStateSubscription;
+
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    super.didPush(route, previousRoute);
+    if (route.settings.name == '/DeviceScreen') {
+      // Start listening to Bluetooth state changes when a new route is pushed
+      _adapterStateSubscription ??=
+          FlutterBluePlus.adapterState.listen((state) {
+        if (state != BluetoothAdapterState.on) {
+          // Pop the current route if Bluetooth is off
+          navigator?.pop();
+        }
+      });
+    }
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    super.didPop(route, previousRoute);
+    // Cancel the subscription when the route is popped
+    _adapterStateSubscription?.cancel();
+    _adapterStateSubscription = null;
   }
 }
