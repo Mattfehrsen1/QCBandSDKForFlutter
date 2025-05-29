@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -34,13 +33,12 @@ class BluetoothOffScreen extends StatelessWidget {
         child: const Text('TURN ON'),
         onPressed: () async {
           try {
-            if (!kIsWeb && Platform.isAndroid) {
+            if (Platform.isAndroid) {
               await FlutterBluePlus.turnOn();
             }
-          } catch (e, backtrace) {
+          } catch (e) {
             Snackbar.show(ABC.a, prettyException("Error Turning On:", e), success: false);
-            print("$e");
-            print("backtrace: $backtrace");
+            print(e);
           }
         },
       ),
@@ -59,7 +57,7 @@ class BluetoothOffScreen extends StatelessWidget {
             children: <Widget>[
               buildBluetoothOffIcon(context),
               buildTitle(context),
-              if (!kIsWeb && Platform.isAndroid) buildTurnOnButton(context),
+              if (Platform.isAndroid) buildTurnOnButton(context),
             ],
           ),
         ),
