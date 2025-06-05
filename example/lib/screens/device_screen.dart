@@ -34,14 +34,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
   late StreamSubscription<bool> _isConnectingSubscription;
   late StreamSubscription<bool> _isDisconnectingSubscription;
   late StreamSubscription<int> _mtuSubscription;
+  late BluetoothCharacteristic _bluetoothCharacteristicNotification;
+  late BluetoothCharacteristic _bluetoothCharacteristicWrite;
 
   Future<void> _discoverServicesAndCharacteristics(
       BluetoothDevice device) async {
     try {
       final services = await device.discoverServices();
+// I/flutter (25374): These are the services 1801
+// I/flutter (25374): These are the services 1800
+// I/flutter (25374): These are the services 6e40fff0-b5a3-f393-e0a9-e50e24dcca9e
+// I/flutter (25374): These are the services de5bf728-d711-4e47-af26-65e3012a5dc7
+// I/flutter (25374): These are the services 180a
+// I/flutter (25374): These are the services fee7
 
       // Look for your specific service UUID
       for (final service in services) {
+        print("These are the services ${service.uuid.str}");
         // TODO: Replace "fff0" with your actual service UUID if different
         if (service.uuid.str
             .toString()
@@ -53,8 +62,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
             // Find write characteristic (fff6)
             if (characteristic.uuid.str.toString().toLowerCase() ==
                 "6e400002-b5a3-f393-e0a9-e50e24dcca9e") {
-              print('Found write characteristic: ${characteristic.uuid.str}');
-              characteristic.write(QCBandSDK.GetDeviceBatteryLevel());
+              // print('Found write characteristic: ${characteristic.uuid.str}');
+              // characteristic.write(QCBandSDK.GetDeviceBatteryLevel());
+              setState(() {
+                _bluetoothCharacteristicWrite = characteristic;
+              });
 
               // FFAppState().DeviceCharactertics = characteristic;
             }
@@ -69,6 +81,30 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 try {
                   // Enable notifications
                   await characteristic.setNotifyValue(true);
+                  setState(() {
+                    _bluetoothCharacteristicWrite = characteristic;
+                  });
+                  print('Notifications enabled');
+                  // FFAppState().ListenValueCharactertics = characteristic;
+                } catch (e) {
+                  print('Error enabling notifications: $e');
+                }
+              } else {
+                print('Characteristic does not support notifications');
+              }
+            }
+            if (characteristic.uuid.str.toString().toLowerCase() ==
+                "6e400003-b5a3-f393-e0a9-e50e24dcca9e") {
+              print(
+                  'Found notification characteristic: ${characteristic.uuid.str}');
+
+              if (characteristic.properties.notify) {
+                try {
+                  // Enable notifications
+                  await characteristic.setNotifyValue(true);
+                  setState(() {
+                    _bluetoothCharacteristicNotification = characteristic;
+                  });
                   print('Notifications enabled');
                   // FFAppState().ListenValueCharactertics = characteristic;
                 } catch (e) {
@@ -95,6 +131,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
         _services = []; // must rediscover services
+        _discoverServicesAndCharacteristics(widget.device);
+      }
+      if (state != BluetoothConnectionState.connected) {
+        onConnectPressed();
+        _discoverServicesAndCharacteristics(widget.device);
       }
       if (state == BluetoothConnectionState.connected && _rssi == null) {
         _rssi = await widget.device.readRssi();
@@ -312,6 +353,17 @@ class _DeviceScreenState extends State<DeviceScreen> {
     ]);
   }
 
+  getDeviceBattery() async {
+    await _bluetoothCharacteristicWrite
+        .write(QCBandSDK.GetDeviceBatteryLevel());
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      var recievedBattery = QCBandSDK.DataParsingWithData(value);
+      print(recievedBattery);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -336,7 +388,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               TextButton(
                   onPressed: () {
                     // Notify Listenner of the Command
-                    _discoverServicesAndCharacteristics(widget.device);
+                    getDeviceBattery();
                     //Send Command
 
                     // Parse Response
