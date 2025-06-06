@@ -913,6 +913,15 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  static Uint8List buildFindDeviceCommand() {
+    final List<int> value = _generateInitValue(); // likely 16 bytes
+    value[0] = 80; // Command ID for FindDeviceReq
+    value[1] = 0x55;
+    value[2] = 0xAA;
+    // Optional: add CRC here if your device uses it
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 //   ///获取多模式运动数据
 //   ///mode 0:表⽰是从最新的位置开始读取(最多50组数据)  2:表⽰接着读取(当数据总数⼤于50的时候) 0x99:表⽰删除所有GPS数据
 //   ///Obtain multimodal motion data
