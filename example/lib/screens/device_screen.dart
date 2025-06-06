@@ -391,6 +391,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  // Device Callibaration
+  runDeviceCalibaration() async {
+//     Type	Meaning
+// 6	Start calibration
+// 2	Stop calibration
+    await _bluetoothCharacteristicWrite
+        .write(QCBandSDK.runDeviceCallibration(6));
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        var recievedData = QCBandSDK.DataParsingWithData(value);
+        print(recievedData);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -441,6 +458,15 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     // Parse Response
                   },
                   child: Text('Find Device ')),
+              TextButton(
+                  onPressed: () {
+                    // Notify Listenner of the Command
+                    // getDeviceBattery();
+                    //Send Command
+                    runDeviceCalibaration();
+                    // Parse Response
+                  },
+                  child: Text('Device Callibaration')),
             ],
           ),
         ),

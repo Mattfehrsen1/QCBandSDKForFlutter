@@ -384,6 +384,51 @@ class ResolveUtil {
     return result;
   }
 
+  static Map<String, dynamic> parseAppRevisionResponse(List<int> data) {
+    if (data.length < 10) {
+      return {
+        "error": "Data too short",
+        "raw": data,
+      };
+    }
+
+    int dataType = data[0];
+    int result = data[9];
+
+    String sensorType;
+    switch (dataType) {
+      case 1:
+        sensorType = "PS Sensor";
+        break;
+      case 2:
+        sensorType = "Bio Sensor";
+        break;
+      default:
+        sensorType = "Unknown";
+    }
+
+    String status;
+    switch (result) {
+      case 1:
+        status = "Success";
+        break;
+      case 2:
+        status = "Pending";
+        break;
+      case 3:
+        status = "Failed";
+        break;
+      default:
+        status = "Unknown";
+    }
+
+    return {
+      "type": sensorType,
+      "result": status,
+      "raw": data,
+    };
+  }
+
 //   ///运动提醒
 //   static Map getActivityAlarm(List<int> value) {
 //     Map mapData = {

@@ -295,12 +295,15 @@ class QCBandSDK {
       //   return ResolveUtil.CloseDevices(value);
       // case DeviceConst.CMD_AUTO_CHECK_STATUS:
       //   return ResolveUtil.GetOffCheckStatus(value);
-      // case DeviceConst.SetBloodpressureCalibration:
-      //   return ResolveUtil.setMethodSuccessful(
-      //       BleConst.SetBloodpressure_calibration);
+      case QcBandSdkConst.cmdDeviceCalibaration:
+        return ResolveUtil.parseAppRevisionResponse(value);
       //   break;
     }
     return ResolveUtil.setMethodError(_getBcdValue(value[0]).toString());
+  }
+
+  static Uint8List runDeviceCallibration(int type) {
+    return Uint8List.fromList([0xA1, type]);
   }
 
 //   ///血糖
@@ -922,6 +925,7 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+
 //   ///获取多模式运动数据
 //   ///mode 0:表⽰是从最新的位置开始读取(最多50组数据)  2:表⽰接着读取(当数据总数⼤于50的时候) 0x99:表⽰删除所有GPS数据
 //   ///Obtain multimodal motion data

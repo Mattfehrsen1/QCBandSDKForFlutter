@@ -24,4 +24,5 @@ class DeviceKey {
   static const String KHeartEndMinter = "heartEndMinter";
   static const String Weeks = "weekValue";
   static const String IntervalTime = "intervalTime";
+  static const String deviceCallibaration = "Device Callibaration";
 }
