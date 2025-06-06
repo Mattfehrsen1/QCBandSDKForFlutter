@@ -158,6 +158,8 @@ class QCBandSDK {
         return ResolveUtil.getDeviceBattery(value);
       case QcBandSdkConst.cmdStepDataToday:
         return ResolveUtil.getStepToday(value);
+      case QcBandSdkConst.cmdStepDataDetails:
+        return ResolveUtil.getStepToday(value);
       // case DeviceConst.CMD_Get_Address:
       //   return ResolveUtil.getDeviceAddress(value);
       // case DeviceConst.CMD_Get_Version:
@@ -680,6 +682,18 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  static Uint8List getDetailStepData(
+      int dayOffset, int startPoint, int endPoint) {
+    final List<int> value = [
+      QcBandSdkConst.cmdStepDataDetails, // = 67
+      dayOffset,
+      15,
+      startPoint,
+      endPoint
+    ];
+    // Optional: Add CRC if and only if protocol requires it
+    return Uint8List.fromList(value);
+  }
 //   ///重启设备
 //   ///MCU soft reset command
 //   static Uint8List MCUReset() {

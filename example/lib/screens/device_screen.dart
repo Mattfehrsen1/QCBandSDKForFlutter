@@ -421,6 +421,20 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  // Step Data of Today
+  deviceDetailStep() async {
+    await _bluetoothCharacteristicWrite
+        .write(QCBandSDK.getDetailStepData(0, 20, 68));
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedBattery = QCBandSDK.DataParsingWithData(value);
+        // print(recievedBattery);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -489,6 +503,15 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     // Parse Response
                   },
                   child: Text('Device Step Data')),
+              TextButton(
+                  onPressed: () {
+                    // Notify Listenner of the Command
+                    // getDeviceBattery();
+                    //Send Command
+                    deviceDetailStep();
+                    // Parse Response
+                  },
+                  child: Text('Device Details Step Data')),
             ],
           ),
         ),
