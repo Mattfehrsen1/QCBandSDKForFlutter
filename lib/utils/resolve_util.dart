@@ -232,6 +232,42 @@ class ResolveUtil {
     return maps;
   }
 
+  static Map<String, dynamic> getStepToday(List<int> value) {
+    final DateTime now = DateTime.now();
+
+    Map<String, dynamic> maps = {
+      "daysAgo": 0,
+      "year": now.year,
+      "day": now.day,
+      "month": now.month,
+      "totalSteps": QCBandSDK.bytes2Int([
+        value[1],
+        value[2],
+        value[3],
+      ]),
+      "runningSteps": QCBandSDK.bytes2Int([
+        value[4],
+        value[5],
+        value[6],
+      ]),
+      "calorie": QCBandSDK.bytes2Int([
+        value[7],
+        value[8],
+        value[9],
+      ]),
+      // in Meters
+      "walkDistance": QCBandSDK.bytes2Int([
+        value[10],
+        value[11],
+        value[12],
+      ]),
+      "sportDuration": QCBandSDK.bytes2Int([value[13], value[14]]) * 60,
+      "sleepDuration": 0, // not handled in original Java code
+    };
+
+    return maps;
+  }
+
 //   ///设备mac地址
 //   static Map getDeviceAddress(List<int> value) {
 //     final StringBuffer address = StringBuffer();

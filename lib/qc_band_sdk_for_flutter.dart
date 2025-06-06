@@ -34,6 +34,18 @@ class QCBandSDK {
     return (b & 0xff) * pow(256, count) as int;
   }
 
+// Byte to Int Util class
+  static int bytes2Int(List<int> data) {
+    int length = data.length;
+    int res = 0;
+
+    for (int i = 0; i < length; i++) {
+      res |= (data[i] & 0xFF) << (8 * (length - 1 - i));
+    }
+
+    return res;
+  }
+
   /// 初始化要发送的数据，16个字节，没有设置的位置都默认为0
   /// Initialize the data to be sent, 16 bytes, and default to 0 for positions that are not set
   static List<int> _generateInitValue() {
@@ -144,6 +156,8 @@ class QCBandSDK {
       //   return ResolveUtil.getGoal(value);
       case QcBandSdkConst.cmdGetDeviceElectricityValue:
         return ResolveUtil.getDeviceBattery(value);
+      case QcBandSdkConst.cmdStepDataToday:
+        return ResolveUtil.getStepToday(value);
       // case DeviceConst.CMD_Get_Address:
       //   return ResolveUtil.getDeviceAddress(value);
       // case DeviceConst.CMD_Get_Version:
@@ -655,6 +669,13 @@ class QCBandSDK {
   static Uint8List GetDeviceBatteryLevel() {
     final List<int> value = _generateInitValue();
     value[0] = QcBandSdkConst.cmdGetDeviceElectricityValue;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List GetStepOfToday() {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdStepDataToday;
     _crcValue(value);
     return Uint8List.fromList(value);
   }

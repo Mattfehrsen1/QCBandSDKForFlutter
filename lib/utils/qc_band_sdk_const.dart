@@ -27,6 +27,7 @@ class QcBandSdkConst {
   static const String cmdSetDeviceTime = '1';
   static const String cmdTakingPicture = '2';
   static const cmdGetDeviceElectricityValue = 3;
+  static const cmdStepDataToday = 72;
   static const cmdHrData = 22;
   static const cmdDeviceCalibaration = 115;
   static const String cmdDeviceFunctionSupport = '60';
