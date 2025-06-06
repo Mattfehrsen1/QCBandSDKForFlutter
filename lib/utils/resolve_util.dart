@@ -312,19 +312,19 @@ class ResolveUtil {
 //     return week;
 //   }
 
-//   static String getByteString(int b) {
-//     final List<int> array = List<int>.generate(8, (int index) {
-//       return 0;
-//     });
-//     var stringBuffer = StringBuffer();
-//     for (int i = 0; i <= 6; i++) {
-//       array[i] = b & 1;
-//       b = b >> 1;
-//       stringBuffer.write(array[i].toString());
-//       stringBuffer.write((i == 6 ? "" : "-"));
-//     }
-//     return stringBuffer.toString();
-//   }
+  static String getByteString(int b) {
+    final List<int> array = List<int>.generate(8, (int index) {
+      return 0;
+    });
+    var stringBuffer = StringBuffer();
+    for (int i = 0; i <= 6; i++) {
+      array[i] = b & 1;
+      b = b >> 1;
+      stringBuffer.write(array[i].toString());
+      stringBuffer.write((i == 6 ? "" : "-"));
+    }
+    return stringBuffer.toString();
+  }
 
 //   static String getByteArray(int b) {
 //     final List<int> array = List<int>.generate(8, (int index) {
@@ -340,24 +340,49 @@ class ResolveUtil {
 //   }
 
 //   ///自动测量心率时间段
-//   static Map getAutoHeart(List<int> value) {
-//     int time = _hexByte2Int(value[7], 0) + _hexByte2Int(value[8], 1);
-//     Map mapData = {
-//       DeviceKey.WorkMode: _hexByte2Int(value[1], 0).toString(),
-//       DeviceKey.StartTime: _bcd2String(value[2]),
-//       DeviceKey.KHeartStartMinter: _bcd2String(value[3]),
-//       DeviceKey.EndTime: _bcd2String(value[4]),
-//       DeviceKey.KHeartEndMinter: _bcd2String(value[5]),
-//       DeviceKey.Weeks: getByteString(value[6]),
-//       DeviceKey.IntervalTime: time.toString()
-//     };
-//     Map maps = {
-//       DeviceKey.DataType: BleConst.GetAutomaticHRMonitoring,
-//       DeviceKey.End: true,
-//       DeviceKey.Data: mapData
-//     };
-//     return maps;
-//   }
+  // static Map getAutoHeart(List<int> value) {
+  //   int time = _hexByte2Int(value[7], 0) + _hexByte2Int(value[8], 1);
+  //   Map mapData = {
+  //     DeviceKey.WorkMode: _hexByte2Int(value[1], 0).toString(),
+  //     DeviceKey.StartTime: _bcd2String(value[2]),
+  //     DeviceKey.KHeartStartMinter: _bcd2String(value[3]),
+  //     DeviceKey.EndTime: _bcd2String(value[4]),
+  //     DeviceKey.KHeartEndMinter: _bcd2String(value[5]),
+  //     DeviceKey.Weeks: getByteString(value[6]),
+  //     DeviceKey.IntervalTime: time.toString()
+  //   };
+  //   Map maps = {
+  //     DeviceKey.DataType: .GetAutomaticHRMonitoring,
+  //     DeviceKey.End: true,
+  //     DeviceKey.Data: mapData
+  //   };
+  //   return maps;
+  // }
+  static Map<String, dynamic> getAutoHeart(List<int> value) {
+    if (value.length < 4) {
+      return {
+        DeviceKey.DataType: DeviceKey.GetAutomaticHRMonitoring,
+        DeviceKey.End: true,
+        DeviceKey.Data: {"error": "Invalid data"}
+      };
+    }
+
+    final isEnabled = value[2] == 1;
+    final interval = value[3];
+
+    Map<String, dynamic> mapData = {
+      DeviceKey.WorkMode: isEnabled ? "1" : "2",
+      DeviceKey.IntervalTime: interval.toString()
+    };
+
+    Map<String, dynamic> result = {
+      DeviceKey.DataType: DeviceKey.GetAutomaticHRMonitoring,
+      DeviceKey.End: true,
+      DeviceKey.Data: mapData
+    };
+
+    return result;
+  }
 
 //   ///运动提醒
 //   static Map getActivityAlarm(List<int> value) {

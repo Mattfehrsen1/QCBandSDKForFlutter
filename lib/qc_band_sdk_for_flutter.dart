@@ -3,6 +3,8 @@ import 'dart:core';
 import 'dart:math';
 import 'dart:typed_data';
 // import 'bean/models.dart';
+import 'package:qc_band_sdk_for_flutter/utils/devicekey.dart';
+
 import 'utils/qc_band_sdk_const.dart';
 import 'utils/resolve_util.dart';
 
@@ -148,8 +150,8 @@ class QCBandSDK {
       //   return ResolveUtil.getDeviceVersion(value);
       // case DeviceConst.CMD_Get_Name:
       //   return ResolveUtil.getDeviceName(value);
-      // case DeviceConst.CMD_Get_AutoHeart:
-      //   return ResolveUtil.getAutoHeart(value);
+      case QcBandSdkConst.cmdHrData:
+        return ResolveUtil.getAutoHeart(value);
       // case DeviceConst.CMD_Reset:
       //   return ResolveUtil.Reset();
       // case DeviceConst.CMD_Mcu_Reset:
@@ -893,13 +895,23 @@ class QCBandSDK {
 //   ///1 心率 2 血氧 3 温度 4 HRV
 //   ///Read auto detect heart rate period
 //   ///1 Heart rate 2 Blood oxygen 3 Temperature 4 HRV
-//   static Uint8List GetAutomaticHRMonitoring(int type) {
-//     final List<int> value = _generateInitValue();
-//     value[0] = DeviceConst.CMD_Get_AutoHeart;
-//     value[1] = type;
-//     _crcValue(value);
-//     return Uint8List.fromList(value);
-//   }
+  static Uint8List GetAutomaticHRMonitoring(int type) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdHrData;
+    value[1] = type;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List SetAutomaticHRMonitoring(bool enable, int interval) {
+    final List<int> value = _generateInitValue(); // likely 16 bytes
+    value[0] = QcBandSdkConst.cmdHrData; // 22
+    value[1] = 2; // write
+    value[2] = enable ? 1 : 2;
+    value[3] = interval;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 
 //   ///获取多模式运动数据
 //   ///mode 0:表⽰是从最新的位置开始读取(最多50组数据)  2:表⽰接着读取(当数据总数⼤于50的时候) 0x99:表⽰删除所有GPS数据
