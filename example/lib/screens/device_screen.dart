@@ -424,7 +424,21 @@ class _DeviceScreenState extends State<DeviceScreen> {
   // Step Data of Today
   deviceDetailStep() async {
     await _bluetoothCharacteristicWrite
-        .write(QCBandSDK.getDetailStepData(0, 20, 68));
+        .write(QCBandSDK.getDetailStepData(2, 20, 80));
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedBattery = QCBandSDK.DataParsingWithData(value);
+        // print(recievedBattery);
+      }
+    });
+  }
+
+  // Step Data of Today
+  hrData() async {
+    await _bluetoothCharacteristicWrite
+        .write(QCBandSDK.getHRate(DateTime(2025, 6, 6).toString()));
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
@@ -512,6 +526,24 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     // Parse Response
                   },
                   child: Text('Device Details Step Data')),
+              TextButton(
+                  onPressed: () {
+                    // Notify Listenner of the Command
+                    // getDeviceBattery();
+                    //Send Command
+                    hrData();
+                    // Parse Response
+                  },
+                  child: Text('heart rate data')),
+              TextButton(
+                  onPressed: () {
+                    // Notify Listenner of the Command
+                    // getDeviceBattery();
+                    //Send Command
+                    deviceDetailStep();
+                    // Parse Response
+                  },
+                  child: Text('HRV Details')),
             ],
           ),
         ),

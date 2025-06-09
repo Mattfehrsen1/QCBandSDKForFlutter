@@ -31,6 +31,7 @@ class QcBandSdkConst {
   static const cmdStepDataDetails = 67;
   static const cmdHrData = 22;
   static const cmdDeviceCalibaration = 115;
+  static const cmdReadHrData = 21;
 
   static const String cmdDeviceFunctionSupport = '60';
   static const String cmdDeviceTouch = '59';

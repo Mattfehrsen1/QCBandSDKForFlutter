@@ -612,23 +612,23 @@ class QCBandSDK {
 //     return Uint8List.fromList(value);
 //   }
 
-//   static _insertDateValue(List<int> list, String time) {
-//     if (time.isNotEmpty) {
-//       var timeArray = time.split(' ');
-//       int year = int.parse(timeArray[0].split('-')[0]);
-//       int month = int.parse(timeArray[0].split('-')[1]);
-//       int day = int.parse(timeArray[0].split('-')[2]);
-//       int hour = int.parse(timeArray[1].split(':')[0]);
-//       int min = int.parse(timeArray[1].split(':')[1]);
-//       int second = int.parse(timeArray[1].split(':')[2]);
-//       list[4] = _getBcdValue(year - 2000);
-//       list[5] = _getBcdValue(month);
-//       list[6] = _getBcdValue(day);
-//       list[7] = _getBcdValue(hour);
-//       list[8] = _getBcdValue(min);
-//       list[9] = _getBcdValue(second);
-//     }
-//   }
+  static _insertDateValue(List<int> list, String time) {
+    if (time.isNotEmpty) {
+      var timeArray = time.split(' ');
+      int year = int.parse(timeArray[0].split('-')[0]);
+      int month = int.parse(timeArray[0].split('-')[1]);
+      int day = int.parse(timeArray[0].split('-')[2]);
+      int hour = int.parse(timeArray[1].split(':')[0]);
+      int min = int.parse(timeArray[1].split(':')[1]);
+      int second = int.parse(timeArray[1].split(':')[2]);
+      list[4] = _getBcdValue(year - 2000);
+      list[5] = _getBcdValue(month);
+      list[6] = _getBcdValue(day);
+      list[7] = _getBcdValue(hour);
+      list[8] = _getBcdValue(min);
+      list[9] = _getBcdValue(second);
+    }
+  }
 
 //   ///进入dfu模式
 //   ///Entering dfu mode
@@ -694,10 +694,19 @@ class QCBandSDK {
     // Optional: Add CRC if and only if protocol requires it
     return Uint8List.fromList(value);
   }
+
+  static Uint8List getHRate(String time) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdReadHrData;
+    _insertDateValue(value, time);
+
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 //   ///重启设备
 //   ///MCU soft reset command
 //   static Uint8List MCUReset() {
-//     final List<int> value = _generateInitValue();
+//     final List<int> value = _generateInitValue();and
 //     value[0] = DeviceConst.CMD_Mcu_Reset;
 //     _crcValue(value);
 //     return Uint8List.fromList(value);
