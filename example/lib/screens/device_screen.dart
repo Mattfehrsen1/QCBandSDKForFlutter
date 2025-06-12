@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:typed_data'; // Required for Uint8List and ByteData
 import 'dart:core'; // Required for Endian
 
@@ -381,7 +382,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       print('Received notification Heart Rate: $value');
       if (value.isNotEmpty) {
         var recievedHrData = QCBandSDK.DataParsingWithData(value);
-        print(recievedHrData);
+        log('Received Heart Rate Data: $recievedHrData');
       }
     });
   }
