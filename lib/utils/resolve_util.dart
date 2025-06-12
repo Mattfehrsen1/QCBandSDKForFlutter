@@ -1,13 +1,18 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:qc_band_sdk_for_flutter/qc_band_sdk_for_flutter.dart';
 
+import '../bean/models.dart';
+import '../qc_band_sdk_for_flutter.dart';
 import 'devicekey.dart';
+import 'qc_band_sdk_const.dart';
 // import 'ble_const.dart';
 // import '../ble_sdk.dart';
 
 class ResolveUtil {
+  // Static map to hold ongoing heart rate responses across multiple calls
+  static final Map<int, ReadHeartRateResponse> _ongoingHrResponses = {};
+
   ///crc校验
   static void crcValue(List<int> value) {
     int crc = 0;
@@ -418,6 +423,57 @@ class ResolveUtil {
     };
 
     return result;
+  }
+
+// Refactored handleIncomingDataHeartData to be a static method
+  static Map<String, dynamic> handleIncomingDataHeartData(Uint8List data) {
+    final commandId = data[0];
+
+    if (commandId == QcBandSdkConst.cmdReadHrData) {
+      final packetIndex = data[1];
+
+      // Using a fixed key (0) for simplicity. In a real app, if you might
+      // request HR data for different days simultaneously, this key
+      // should uniquely identify the ongoing data collection (e.g., based on a timestamp from the request).
+      final int currentDayKey = 0;
+
+      ReadHeartRateResponse hrResponse;
+      if (_ongoingHrResponses.containsKey(currentDayKey)) {
+        hrResponse = _ongoingHrResponses[currentDayKey]!;
+      } else {
+        hrResponse = ReadHeartRateResponse();
+        _ongoingHrResponses[currentDayKey] = hrResponse;
+      }
+
+      final isComplete = hrResponse.acceptData(data);
+
+      if (isComplete) {
+        _ongoingHrResponses.remove(currentDayKey); // Remove once complete
+        print('Heart rate data for the day is complete!');
+        return {
+          DeviceKey.DataType: 'HeartRateData',
+          DeviceKey.End: true,
+          DeviceKey.Data: {
+            'utcTime': hrResponse.mUtcTime,
+            'heartRateArray': hrResponse.mHeartRateArray,
+            'totalValues': hrResponse.currentHrArrayFilledSize
+          }
+        };
+      } else {
+        // Data transfer is still ongoing
+        return {
+          DeviceKey.DataType: 'HeartRateData',
+          DeviceKey.End:
+              false, // Indicate that the response is not yet complete
+          DeviceKey.Data: {
+            'progress': hrResponse.currentHrArrayFilledSize,
+            'totalExpected': hrResponse.mHeartRateArray.length
+          }
+        };
+      }
+    }
+    // This case should ideally not be reached if called correctly from DataParsingWithData
+    return {"error ": setMethodError("Command 21")};
   }
 
   static Map<String, dynamic> parseAppRevisionResponse(List<int> data) {

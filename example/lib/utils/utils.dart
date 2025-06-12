@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 // It is essentially a stream but:
 //  1. we cache the latestValue of the stream
@@ -171,3 +172,19 @@ int byteArrayToInt(List<int> b) {
   int s = s0 | s1 | s2 | s3;
   return s;
 }
+
+List<int> hexStringToCmdBytes(final String hexString) {
+  if (hexString.length > 30 || hexString.length % 2 == 1)
+    throw ArgumentError(
+        'hex string must be an even number of hex digits [0-f] less than or equal to 30 chars');
+  final bytes = List<int>.filled(16, 0);
+  for (int i = 0; i < hexString.length / 2; i++) {
+    bytes[i] = int.parse(hexString.substring(2 * i, 2 * i + 2), radix: 16);
+  }
+  // last byte is a checksum
+  bytes[15] = bytes.fold(0, (previous, current) => previous + current) & 0xff;
+  return bytes;
+}
+
+
+

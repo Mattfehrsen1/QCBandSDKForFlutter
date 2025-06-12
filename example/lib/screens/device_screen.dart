@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data'; // Required for Uint8List and ByteData
+import 'dart:core'; // Required for Endian
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:qc_band_sdk_for_flutter_example/utils/utils.dart';
 
 import '../widgets/service_tile.dart';
 import '../widgets/characteristic_tile.dart';
@@ -365,17 +368,36 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   getHRData() async {
-    await _bluetoothCharacteristicWrite
-        .write(QCBandSDK.GetAutomaticHRMonitoring(1));
+    // Example Usage:
+    int currentUnixTimestamp =
+        DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    Uint8List heartRateCommandPacket =
+        QCBandSDK.buildReadHeartRateCommand(currentUnixTimestamp);
+
+    print('Generated command packet: $heartRateCommandPacket');
+    await _bluetoothCharacteristicWrite.write(heartRateCommandPacket);
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
-      print('Received notification: $value');
+      print('Received notification Heart Rate: $value');
       if (value.isNotEmpty) {
         var recievedHrData = QCBandSDK.DataParsingWithData(value);
         print(recievedHrData);
       }
     });
   }
+  // Heart Rate
+
+// Function to convert an integer Unix timestamp to a 4-byte little-endian array
+
+// Example Usage:
+// int currentUnixTimestamp = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+// Uint8List heartRateCommandPacket = buildReadHeartRateCommand(currentUnixTimestamp);
+//
+// print('Generated command packet: $heartRateCommandPacket');
+//
+// // To verify the timestamp interpretation on the receiving end (similar to Java's byteArrayToInt):
+// int reconstructedTimestamp = ByteData.view(heartRateCommandPacket.buffer).getInt32(1, Endian.little);
+// print('Reconstructed timestamp: $reconstructedTimestamp');
 
 // Find equipment
   findDevice() async {
@@ -512,6 +534,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   onPressed: () {
                     // Notify Listenner of the Command
                     // getDeviceBattery();
+                    TODO: // Not Working
                     //Send Command
                     stepData();
                     // Parse Response
@@ -521,6 +544,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   onPressed: () {
                     // Notify Listenner of the Command
                     // getDeviceBattery();
+                    TODO: // Not Working
                     //Send Command
                     deviceDetailStep();
                     // Parse Response
@@ -530,8 +554,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   onPressed: () {
                     // Notify Listenner of the Command
                     // getDeviceBattery();
+                    TODO: // Not Working
                     //Send Command
-                    hrData();
+
+                    getHRData();
                     // Parse Response
                   },
                   child: Text('heart rate data')),

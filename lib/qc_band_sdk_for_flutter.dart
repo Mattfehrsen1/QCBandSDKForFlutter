@@ -3,7 +3,6 @@ import 'dart:core';
 import 'dart:math';
 import 'dart:typed_data';
 // import 'bean/models.dart';
-import 'package:qc_band_sdk_for_flutter/utils/devicekey.dart';
 
 import 'utils/qc_band_sdk_const.dart';
 import 'utils/resolve_util.dart';
@@ -166,8 +165,9 @@ class QCBandSDK {
       //   return ResolveUtil.getDeviceVersion(value);
       // case DeviceConst.CMD_Get_Name:
       //   return ResolveUtil.getDeviceName(value);
-      case QcBandSdkConst.cmdHrData:
-        return ResolveUtil.getAutoHeart(value);
+      case QcBandSdkConst.cmdReadHrData:
+        // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
+        return ResolveUtil.handleIncomingDataHeartData(Uint8List.fromList(value));
       // case DeviceConst.CMD_Reset:
       //   return ResolveUtil.Reset();
       // case DeviceConst.CMD_Mcu_Reset:
@@ -321,6 +321,7 @@ class QCBandSDK {
   static Uint8List runDeviceCallibration(int type) {
     return Uint8List.fromList([0xA1, type]);
   }
+  
 
 //   ///血糖
 //   static Uint8List BloodsugarWithMode(int ppgMode, int ppgStatus) {
@@ -703,6 +704,34 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+  // Function to construct the heart rate request command (16 bytes)
+ static Uint8List buildReadHeartRateCommand(int unixTimestamp) {
+
+    // Define the total length of the command packet
+    const int CMD_DATA_LENGTH = 16;
+
+    // Initialize a Uint8List (byte array) of the specified length.
+    // By default, Uint8List initializes all elements to 0.
+    final commandBytes = Uint8List(CMD_DATA_LENGTH);
+
+    // Set the command ID as the first byte of the packet
+    commandBytes[0] = QcBandSdkConst.cmdReadHrData;
+
+    // Convert the integer Unix timestamp into a 4-byte little-endian array
+    final timestampBytes = intToLittleEndian4Bytes(unixTimestamp);
+
+    // Copy these 4 timestamp bytes into the command packet, starting from index 1
+    // (right after the command ID)
+    for (int i = 0; i < timestampBytes.length; i++) {
+      commandBytes[1 + i] = timestampBytes[i];
+    }
+
+    // The remaining bytes (from index 5 to 15) will remain 0,
+    // effectively padding the command packet to the required 16 bytes,
+    // mirroring the behavior observed in the Java implementation's context.
+
+    return commandBytes;
+  }
 //   ///重启设备
 //   ///MCU soft reset command
 //   static Uint8List MCUReset() {
@@ -942,10 +971,17 @@ class QCBandSDK {
 //   ///1 心率 2 血氧 3 温度 4 HRV
 //   ///Read auto detect heart rate period
 //   ///1 Heart rate 2 Blood oxygen 3 Temperature 4 HRV
-  static Uint8List GetAutomaticHRMonitoring(int type) {
+  static Uint8List GetAutomaticHRMonitoring() {
     final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdHrData;
-    value[1] = type;
+    value[0] = QcBandSdkConst.cmdStartHeartRateInt;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List GetRealTimeHeartRate() {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdGetRealTimeHeartRate;
+    value[1] = 1;
     _crcValue(value);
     return Uint8List.fromList(value);
   }
@@ -1204,4 +1240,12 @@ class QCBandSDK {
 //     return Uint8List.fromList(value);
 //   }
 // }
+}
+Uint8List intToLittleEndian4Bytes(int value) {
+  // Create a ByteData buffer of 4 bytes
+  final byteData = ByteData(4);
+  // Set the 32-bit integer value at offset 0 with little-endian byte order
+  byteData.setInt32(0, value, Endian.little);
+  // Return the underlying Uint8List
+  return byteData.buffer.asUint8List();
 }
