@@ -22,6 +22,7 @@ class QcBandSdkConst {
   static const int rspOk = 0;
   static const int stringLimit = 64;
   static const int bandPressureCount = 50;
+  static const int cmdHrv = 57;
 
   // BLE Commands (converted as strings for easy mapping)
   static const String cmdSetDeviceTime = '1';
