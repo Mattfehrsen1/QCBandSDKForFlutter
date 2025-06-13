@@ -25,4 +25,15 @@ class DeviceKey {
   static const String Weeks = "weekValue";
   static const String IntervalTime = "intervalTime";
   static const String deviceCallibaration = "Device Callibaration";
+
+  // HRV Sample
+  static const String date = "Date";
+  static const String hrv = "HRV";
+  static const String valcularAging = "VascularAging";
+  static const String stress = "Stress";
+  static const String highBP = "highBP";
+  static const String lowBP = "lowBP";
+  static const String heartRate = "HeartRate";
+  
+
 }

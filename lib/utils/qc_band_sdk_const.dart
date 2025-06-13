@@ -22,7 +22,7 @@ class QcBandSdkConst {
   static const int rspOk = 0;
   static const int stringLimit = 64;
   static const int bandPressureCount = 50;
-  static const int cmdHrv = 57;
+ 
 
   // BLE Commands (converted as strings for easy mapping)
   static const String cmdSetDeviceTime = '1';
@@ -35,6 +35,7 @@ class QcBandSdkConst {
   static const cmdReadHrData = 21;
   static const cmdStartHeartRateInt = 105;
   static const cmdGetRealTimeHeartRate = 30;
+  static const int cmdHrv = 57;
 
   static const String cmdDeviceFunctionSupport = '60';
   static const String cmdDeviceTouch = '59';
@@ -114,5 +115,5 @@ class QcBandSdkConst {
   static const String cmdPressureSetting = '54';
   static const String cmdPressure = '55';
   static const String cmdHrvEnable = '56';
-  static const String cmdHrv = '57';
+  // static const String cmdHrv = '57';
 }

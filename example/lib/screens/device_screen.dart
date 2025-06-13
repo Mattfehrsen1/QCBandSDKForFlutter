@@ -5,6 +5,7 @@ import 'dart:core'; // Required for Endian
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:qc_band_sdk_for_flutter/utils/qc_band_sdk_const.dart';
 import 'package:qc_band_sdk_for_flutter_example/utils/utils.dart';
 
 import '../widgets/service_tile.dart';
@@ -472,6 +473,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  // Step Data of Today
+  hrvDetails() async {
+    // Today
+    await _bluetoothCharacteristicWrite.write(
+      QCBandSDK.getHRV(0),
+    );
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdHrv) {
+        var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received HRV: $recievedHRVData');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -567,7 +585,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     // Notify Listenner of the Command
                     // getDeviceBattery();
                     //Send Command
-                    deviceDetailStep();
+                    hrvDetails();
                     // Parse Response
                   },
                   child: Text('HRV Details')),

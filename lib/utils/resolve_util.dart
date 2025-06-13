@@ -856,43 +856,43 @@ class ResolveUtil {
 //   }
 
 //   ///htv测试数据
-//   static Map getHrvTestData(List<int> value) {
-//     Map maps = {DeviceKey.DataType: BleConst.GetHRVData, DeviceKey.End: false};
-//     List<Map> list = [];
-//     maps.addAll({DeviceKey.Data: list});
-//     int count = 15;
-//     int length = value.length;
-//     int size = (length ~/ count);
-//     if (size == 0) {
-//       maps.addAll({DeviceKey.End: true});
-//       return maps;
-//     }
-//     if (value[value.length - 1] == 0xff) {
-//       maps.addAll({DeviceKey.End: true});
-//     }
-//     for (int i = 0; i < size; i++) {
-//       Map<String, String> hashMap = {};
-//       String date =
-//           "20${_bcd2String(value[3 + i * count])}.${_bcd2String(value[4 + i * count])}.${_bcd2String(value[5 + i * count])} ${_bcd2String(value[6 + i * count])}:${_bcd2String(value[7 + i * count])}:${_bcd2String(value[8 + i * count])}";
-//       String hrv = _hexByte2Int(value[9 + i * count], 0).toString();
-//       String blood = _hexByte2Int(value[10 + i * count], 0).toString();
-//       String heart = _hexByte2Int(value[11 + i * count], 0).toString();
-//       String tired = _hexByte2Int(value[12 + i * count], 0).toString();
-//       String moodValue = _hexByte2Int(value[13 + i * count], 0).toString();
-//       String breathRate = _hexByte2Int(value[14 + i * count], 0).toString();
-//       hashMap.addAll({
-//         DeviceKey.Date: date,
-//         DeviceKey.HRV: hrv,
-//         DeviceKey.VascularAging: blood,
-//         DeviceKey.Stress: tired,
-//         DeviceKey.highBP: moodValue,
-//         DeviceKey.lowBP: breathRate,
-//         DeviceKey.HeartRate: heart
-//       });
-//       list.add(hashMap);
-//     }
-//     return maps;
-//   }
+  static Map getHrvTestData(List<int> value) {
+    Map maps = {DeviceKey.DataType: QcBandSdkConst.cmdHrv, DeviceKey.End: false};
+    List<Map> list = [];
+    maps.addAll({DeviceKey.Data: list});
+    int count = 15;
+    int length = value.length;
+    int size = (length ~/ count);
+    if (size == 0) {
+      maps.addAll({DeviceKey.End: true});
+      return maps;
+    }
+    if (value[value.length - 1] == 0xff) {
+      maps.addAll({DeviceKey.End: true});
+    }
+    for (int i = 0; i < size; i++) {
+      Map<String, String> hashMap = {};
+      String date =
+          "20${_bcd2String(value[3 + i * count])}.${_bcd2String(value[4 + i * count])}.${_bcd2String(value[5 + i * count])} ${_bcd2String(value[6 + i * count])}:${_bcd2String(value[7 + i * count])}:${_bcd2String(value[8 + i * count])}";
+      String hrv = _hexByte2Int(value[9 + i * count], 0).toString();
+      String blood = _hexByte2Int(value[10 + i * count], 0).toString();
+      String heart = _hexByte2Int(value[11 + i * count], 0).toString();
+      String tired = _hexByte2Int(value[12 + i * count], 0).toString();
+      String moodValue = _hexByte2Int(value[13 + i * count], 0).toString();
+      String breathRate = _hexByte2Int(value[14 + i * count], 0).toString();
+      hashMap.addAll({
+        DeviceKey.date: date,
+        DeviceKey.hrv: hrv,
+        DeviceKey.valcularAging: blood,
+        DeviceKey.stress: tired,
+        DeviceKey.highBP: moodValue,
+        DeviceKey.lowBP: breathRate,
+        DeviceKey.heartRate: heart
+      });
+      list.add(hashMap);
+    }
+    return maps;
+  }
 
 //   ///闹钟数据
 //   static Map getClockData(List<int> value) {

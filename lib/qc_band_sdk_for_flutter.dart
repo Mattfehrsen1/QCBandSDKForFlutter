@@ -167,7 +167,11 @@ class QCBandSDK {
       //   return ResolveUtil.getDeviceName(value);
       case QcBandSdkConst.cmdReadHrData:
         // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
-        return ResolveUtil.handleIncomingDataHeartData(Uint8List.fromList(value));
+        return ResolveUtil.handleIncomingDataHeartData(
+            Uint8List.fromList(value));
+      case QcBandSdkConst.cmdHrv:
+        // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
+        return ResolveUtil.getHrvTestData(value);
       // case DeviceConst.CMD_Reset:
       //   return ResolveUtil.Reset();
       // case DeviceConst.CMD_Mcu_Reset:
@@ -321,7 +325,6 @@ class QCBandSDK {
   static Uint8List runDeviceCallibration(int type) {
     return Uint8List.fromList([0xA1, type]);
   }
-  
 
 //   ///血糖
 //   static Uint8List BloodsugarWithMode(int ppgMode, int ppgStatus) {
@@ -704,9 +707,9 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
-  // Function to construct the heart rate request command (16 bytes)
- static Uint8List buildReadHeartRateCommand(int unixTimestamp) {
 
+  // Function to construct the heart rate request command (16 bytes)
+  static Uint8List buildReadHeartRateCommand(int unixTimestamp) {
     // Define the total length of the command packet
     const int CMD_DATA_LENGTH = 16;
 
@@ -731,6 +734,19 @@ class QCBandSDK {
     // mirroring the behavior observed in the Java implementation's context.
 
     return commandBytes;
+  }
+  //offset  0-6
+  //Synchronization hrv 7 days 0 only synchronizes today 1
+// yesterday 2 synchronizes the day before yesterday .... supports up
+// to 7 days
+
+  static Uint8List getHRV(int offset) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdHrv;
+    value[1] = offset;
+
+    _crcValue(value);
+    return Uint8List.fromList(value);
   }
 //   ///重启设备
 //   ///MCU soft reset command
@@ -1241,6 +1257,7 @@ class QCBandSDK {
 //   }
 // }
 }
+
 Uint8List intToLittleEndian4Bytes(int value) {
   // Create a ByteData buffer of 4 bytes
   final byteData = ByteData(4);
