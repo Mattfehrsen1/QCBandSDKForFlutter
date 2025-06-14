@@ -748,6 +748,20 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+
+  // static const int ACTION_START = 1;
+  // static const int ACTION_PAUSE = 2;
+  // static const int ACTION_CONTINUE = 3;
+  // static const int ACTION_STOP = 4;
+
+  static Uint8List liveHeartData(int action) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.liveHeart;
+    value[1] = action;
+
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 //   ///重启设备
 //   ///MCU soft reset command
 //   static Uint8List MCUReset() {

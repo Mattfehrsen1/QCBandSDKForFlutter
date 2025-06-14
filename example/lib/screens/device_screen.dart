@@ -490,6 +490,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  // Step Data of Today
+  liveHeartRate() async {
+    // Today
+    await _bluetoothCharacteristicWrite.write(
+      QCBandSDK.liveHeartData(1),
+    );
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty && value[0] == QcBandSdkConst.liveHeart) {
+        var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received HRV: $recievedHRVData');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -573,7 +590,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   onPressed: () {
                     // Notify Listenner of the Command
                     // getDeviceBattery();
-                    TODO: // Not Working
+                    TODO: // Working Need Work on Parsing
                     //Send Command
 
                     getHRData();
@@ -581,14 +598,27 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   },
                   child: Text('heart rate data')),
               TextButton(
-                  onPressed: () {
-                    // Notify Listenner of the Command
-                    // getDeviceBattery();
-                    //Send Command
-                    hrvDetails();
-                    // Parse Response
-                  },
-                  child: Text('HRV Details')),
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  TODO: // Working Need Work on Parsing
+                  hrvDetails();
+                  // Parse Response
+                },
+                child: Text('HRV Details'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  TODO: // Working Need Work on Parsing
+                  liveHeartRate();
+                  // Parse Response
+                },
+                child: Text('Live Heart Rate'),
+              ),
             ],
           ),
         ),
