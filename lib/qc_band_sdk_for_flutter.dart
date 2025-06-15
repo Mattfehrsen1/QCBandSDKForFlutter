@@ -787,7 +787,7 @@ class QCBandSDK {
 
   static Uint8List liveHeartData(int action) {
     final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.liveHeart;
+    value[0] = QcBandSdkConst.cmdGetRealTimeHeartRate;
     value[1] = action;
 
     _crcValue(value);

@@ -548,7 +548,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     //Send Command
                     getHRData();
                     // Parse Response
-                    print('Battery Button Pressed');
                   },
                   child: Text('Heart Rate Setting')),
               TextButton(
