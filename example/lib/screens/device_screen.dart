@@ -513,7 +513,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   sleepDetailData() async {
     // Today
     await _bluetoothCharacteristicWrite.write(
-      QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
+      QCBandSDK.generateReadSleepDetailsCommand(2, 0, 95),
     );
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
