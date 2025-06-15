@@ -448,10 +448,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
-  // Step Data of Today
+  // Step Data of Today Details
   deviceDetailStep() async {
     await _bluetoothCharacteristicWrite
-        .write(QCBandSDK.generateReadStepDetailsCommand(2, 20, 80));
+        .write(QCBandSDK.generateReadStepDetailsCommand(0, 0, 95));
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
