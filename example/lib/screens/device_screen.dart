@@ -510,6 +510,22 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  sleepDetailData() async {
+    // Today
+    await _bluetoothCharacteristicWrite.write(
+      QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
+    );
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received Sleep: $value');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -620,6 +636,17 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   // Parse Response
                 },
                 child: Text('Live Heart Rate'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  TODO: // Working Need Work on Parsing
+                  sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Sleep Details Data'),
               ),
             ],
           ),

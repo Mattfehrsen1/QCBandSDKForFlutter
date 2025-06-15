@@ -793,6 +793,42 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+
+  static Uint8List generateReadSleepDetailsCommand(
+      int dayOffset, int startIndex, int endIndex) {
+    // Validate inputs based on ReadSleepDetailsReq constraints
+
+    if (!(dayOffset >= 0 && dayOffset <= 29)) {
+      throw ArgumentError("dayOffset must be between 0 and 29.");
+    }
+
+    if (!(startIndex <= endIndex && endIndex <= 95)) {
+      throw ArgumentError(
+          "startIndex must be <= endIndex, and endIndex must be <= 95.");
+    }
+
+    // Step 1: Initialize a 16-byte Uint8List with zeros (equivalent to _generateValue(16) returning zeros)
+
+    final List<int> value = _generateInitValue();
+
+    // Step 2: Place the command code and payload bytes
+
+    value[0] = 68; // Main Command Code (decimal 68)
+
+    value[1] = dayOffset;
+
+    value[2] = 15; // Fixed value from ReadSleepDetailsReq
+
+    value[3] = startIndex;
+
+    value[4] = endIndex;
+
+    _crcValue(value);
+
+    log('Attempting to write: ${Uint8List.fromList(value)}');
+
+    return Uint8List.fromList(value);
+  }
 //   ///重启设备
 //   ///MCU soft reset command
 //   static Uint8List MCUReset() {
