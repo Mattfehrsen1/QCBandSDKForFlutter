@@ -1,6 +1,5 @@
-import 'dart:convert';
 import 'dart:core';
-import 'dart:math';
+import 'dart:developer';
 import 'dart:typed_data';
 // import 'bean/models.dart';
 
@@ -27,10 +26,6 @@ class QCBandSDK {
       return 0;
     });
     return data;
-  }
-
-  static int _hexByte2Int(int b, int count) {
-    return (b & 0xff) * pow(256, count) as int;
   }
 
 // Byte to Int Util class
@@ -60,33 +55,33 @@ class QCBandSDK {
   }
 
   /// message content needed to be sent is converted to List<int>
-  static List<int> _getInfoValue(String info, int maxLength) {
-    if (info.isEmpty) return [];
-    final List<int> nameBytes = utf8.encode(info);
-    if (nameBytes.length >= maxLength) {
-      /// two commands in total 32 bytes, with only 24 bytes of content.
-      /// （32-2*（1cmd+1 Message type + 1 length + 1 validation））
-      final List<int> real = List<int>.generate(maxLength, (int index) {
-        return 0;
-      });
-      final List<int> chars = info.codeUnits;
-      int length = 0;
-      for (int i = 0; i < chars.length; i++) {
-        final String s = chars[i].toString();
-        final List<int> nameB = utf8.encode(s);
-        if (length + nameB.length == maxLength) {
-          arrayCopy(nameBytes, 0, real, 0, real.length);
-          return real;
-        } else if (length + nameB.length > maxLength) {
-          /// >24 will result in a byte not being sent to the lower machine causing garbled code
-          arrayCopy(nameBytes, 0, real, 0, length);
-          return real;
-        }
-        length += nameB.length;
-      }
-    }
-    return nameBytes;
-  }
+  // static List<int> _getInfoValue(String info, int maxLength) {
+  //   if (info.isEmpty) return [];
+  //   final List<int> nameBytes = utf8.encode(info);
+  //   if (nameBytes.length >= maxLength) {
+  //     /// two commands in total 32 bytes, with only 24 bytes of content.
+  //     /// （32-2*（1cmd+1 Message type + 1 length + 1 validation））
+  //     final List<int> real = List<int>.generate(maxLength, (int index) {
+  //       return 0;
+  //     });
+  //     final List<int> chars = info.codeUnits;
+  //     int length = 0;
+  //     for (int i = 0; i < chars.length; i++) {
+  //       final String s = chars[i].toString();
+  //       final List<int> nameB = utf8.encode(s);
+  //       if (length + nameB.length == maxLength) {
+  //         arrayCopy(nameBytes, 0, real, 0, real.length);
+  //         return real;
+  //       } else if (length + nameB.length > maxLength) {
+  //         /// >24 will result in a byte not being sent to the lower machine causing garbled code
+  //         arrayCopy(nameBytes, 0, real, 0, length);
+  //         return real;
+  //       }
+  //       length += nameB.length;
+  //     }
+  //   }
+  //   return nameBytes;
+  // }
 
   /// crc验证
   /// crc validation
@@ -746,6 +741,42 @@ class QCBandSDK {
     value[1] = offset;
 
     _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List generateReadStepDetailsCommand(
+      int dayOffset, int startIndex, int endIndex) {
+    // Validate inputs based on ReadSleepDetailsReq constraints
+
+    if (!(dayOffset >= 0 && dayOffset <= 29)) {
+      throw ArgumentError("dayOffset must be between 0 and 29.");
+    }
+
+    if (!(startIndex <= endIndex && endIndex <= 95)) {
+      throw ArgumentError(
+          "startIndex must be <= endIndex, and endIndex must be <= 95.");
+    }
+
+    // Step 1: Initialize a 16-byte Uint8List with zeros (equivalent to _generateValue(16) returning zeros)
+
+    final List<int> value = _generateInitValue();
+
+    // Step 2: Place the command code and payload bytes
+
+    value[0] = 67; // Main Command Code (decimal 68)
+
+    value[1] = dayOffset;
+
+    value[2] = 15; // Fixed value from ReadSleepDetailsReq
+
+    value[3] = startIndex;
+
+    value[4] = endIndex;
+
+    _crcValue(value);
+
+    log('Attempting to write: ${Uint8List.fromList(value)}');
+
     return Uint8List.fromList(value);
   }
 
