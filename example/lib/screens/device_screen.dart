@@ -364,8 +364,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
-      var recievedBattery = QCBandSDK.DataParsingWithData(value);
-      print(recievedBattery);
+
+      if (value.isNotEmpty) {
+        var recievedBattery = QCBandSDK.DataParsingWithData(value);
+        log('Battery Data: $recievedBattery');
+      }
     });
   }
 
