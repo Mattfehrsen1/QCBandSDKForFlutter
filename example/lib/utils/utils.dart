@@ -186,5 +186,39 @@ List<int> hexStringToCmdBytes(final String hexString) {
   return bytes;
 }
 
+int bcdToDecimal(int data) {
+  // If 'data' is the byte 0x25 (hexadecimal), which represents BCD for 25
+  // In binary: 0010 0101
 
+  int decade =
+      data >> 4 & 15; // In binary: (0010 0101 >> 4) = 0000 0010 (decimal 2)
+  // Then: 0000 0010 & 0000 1111 (15) = 0000 0010 (decimal 2)
+  int unit =
+      data & 15; // In binary: 0010 0101 & 0000 1111 = 0000 0101 (decimal 5)
 
+  return decade * 10 + unit; // 2 * 10 + 5 = 25
+}
+
+int bytes2Int(List<int> data) {
+  // In Dart, List<int> or Uint8List is used for byte arrays.
+  // The elements are already int, so no explicit (data[i] & 255) is strictly needed
+  // if the source data adheres to 0-255 byte values.
+  // However, including '& 0xFF' (Dart equivalent of '& 255') can serve as a safeguard
+  // if the List<int> might contain values outside the 0-255 range and you want to
+  // ensure only the lowest 8 bits are used.
+
+  int length = data.length;
+  int res = 0;
+
+  for (int i = 0; i < length; ++i) {
+    // (data[i] & 0xFF) ensures we only consider the lower 8 bits, treating it as unsigned.
+    // This is crucial for multi-byte conversions if negative bytes were possible.
+    // << 8 * (length - 1 - i) performs the left shift to position the byte correctly.
+    // For big-endian:
+    // i = 0: (length - 1 - 0) -> highest byte
+    // i = 1: (length - 1 - 1) -> second highest byte, etc.
+    res |= (data[i] & 0xFF) << (8 * (length - 1 - i));
+  }
+
+  return res;
+}

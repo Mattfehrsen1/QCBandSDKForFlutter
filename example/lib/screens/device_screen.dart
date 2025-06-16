@@ -450,16 +450,52 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   // Step Data of Today Details
   deviceDetailStep() async {
+    var jsonData = [];
     await _bluetoothCharacteristicWrite
         .write(QCBandSDK.generateReadStepDetailsCommand(0, 0, 95));
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
-      print('Received notification: $value');
+      // print('Received notification: $value');
       if (value.isNotEmpty) {
+        if (value[1] != 240 && value[0] == 67) {
+          print('This is the Second Value ${value[1]}');
+          jsonData.add(parseDetailStepData(value));
+        }
+        if (value[5] == value[6] - 1) {
+          log("Accumated Data $jsonData");
+          jsonData = [];
+          
+        }
         // var recievedBattery = QCBandSDK.DataParsingWithData(value);
         // print(recievedBattery);
       }
     });
+  }
+
+  parseDetailStepData(List<int> value) {
+    Map stepDetail = {};
+    // Seperate the Year , Month , Day , Time Index , Calorie , Walk Steps , Distance first
+    // Combine the all data in one.
+    int year = bcdToDecimal(value[1]) + 2000;
+    int month = bcdToDecimal(value[2]);
+    int day = bcdToDecimal(value[3]);
+    double timeInhr = (value[4] * 15) / 60;
+    int calorie = bytes2Int([value[8], value[7]]);
+    int walkSteps = bytes2Int([value[10], value[9]]);
+    int distance = bytes2Int([value[12], value[11]]);
+
+    stepDetail = {
+      "year": year,
+      "month": month,
+      "day": day,
+      "time": timeInhr,
+      "calorie": calorie,
+      "walkSteps": walkSteps,
+      "distance": distance,
+    };
+    log('This is the Date Parsed $stepDetail');
+    // int month = bcdToDecimal(value[2]);
+    return stepDetail;
   }
 
   // Step Data of Today
