@@ -372,25 +372,138 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
-  getHRData() async {
-    // Example Usage:
-    int currentUnixTimestamp =
-        DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-    Uint8List heartRateCommandPacket =
-        QCBandSDK.buildReadHeartRateCommand(currentUnixTimestamp);
+  // Global or class-level variables to store accumulated HR data and track state
+Map<String, int> _accumulatedHrData = {};
+int _lastParsedPacketIndex = -1;
+int _nextExpectedDataPointMinute = 0; // Tracks the start time for the *next* expected HR data point
 
-    print('Generated command packet: $heartRateCommandPacket');
-    await _bluetoothCharacteristicWrite.write(heartRateCommandPacket);
-    _bluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print('Received notification Heart Rate: $value');
-      if (value.isNotEmpty) {
-        var recievedHrData = QCBandSDK.DataParsingWithData(value);
-        log('Received Heart Rate Data: $recievedHrData');
+
+
+getHRData() async {
+  // Reset state variables at the beginning of a new HR data retrieval session
+  _accumulatedHrData = {};
+  _lastParsedPacketIndex = -1;
+  _nextExpectedDataPointMinute = 0;
+
+  int currentUnixTimestamp = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+  Uint8List heartRateCommandPacket = QCBandSDK.buildReadHeartRateCommand(currentUnixTimestamp);
+
+  print('Generated command packet: $heartRateCommandPacket');
+  await _bluetoothCharacteristicWrite.write(heartRateCommandPacket);
+
+  _bluetoothCharacteristicNotification.value.listen((value) {
+    if (value.isNotEmpty) {
+      if (value[0] == 21 && value[1] >= 1) {
+        log('Received HR data packet: $value');
+
+        int packetIndex = value[1];
+        int totalPackets = value[2]; // Assuming value[2] is the total number of packets expected
+
+        if (packetIndex <= _lastParsedPacketIndex && _lastParsedPacketIndex != -1) {
+          log('Skipping already processed or out-of-order packet: $packetIndex (last processed: $_lastParsedPacketIndex)');
+          return;
+        }
+
+        int dataStartIndex;
+        int dataPointsCount;
+
+        if (packetIndex == 1) {
+          dataStartIndex = 6;
+          dataPointsCount = 9;
+          log('Parsing FIRST HR packet (index $packetIndex): Data starts at index $dataStartIndex, count $dataPointsCount.');
+        } else {
+          dataStartIndex = 2; // Data points start from values[2]
+          dataPointsCount = 13; // Each packet contains 13 data points
+          log('Parsing SUBSEQUENT HR packet (index $packetIndex): Data starts at index $dataStartIndex, count $dataPointsCount.');
+        }
+
+        if (value.length < dataStartIndex + dataPointsCount) {
+          log('Error: Packet with index $packetIndex is too short for its declared data points. Expected at least ${dataStartIndex + dataPointsCount} bytes, got ${value.length}.');
+          return;
+        }
+
+        parseAndAccumulateHrData(
+          values: value,
+          dataStartIndex: dataStartIndex,
+          dataPointsCount: dataPointsCount,
+        );
+
+        _lastParsedPacketIndex = packetIndex;
+
+        // --- Outputting Accumulated Data After Each Packet ---
+        log('Accumulated HR data after packet $packetIndex: $_accumulatedHrData');
+
+        // Check if this is the last expected packet and log the final data.
+        if (packetIndex == totalPackets) {
+          log('--- All HR data packets received. Final Accumulated Data ---');
+          log('$_accumulatedHrData'); // This will show the complete map
+          log('-------------------------------------------------------');
+          // You might want to pass _accumulatedHrData to a callback or update a UI here.
+        }
       }
-    });
+    }
+  });
+}
+
+/// Parses a heart rate data packet and accumulates the data.
+parseAndAccumulateHrData({
+  required List<int> values,
+  required int dataStartIndex,
+  required int dataPointsCount,
+}) {
+  int lastDataPointMinuteInPacket = _nextExpectedDataPointMinute;
+
+  for (int i = 0; i < dataPointsCount; i++) {
+    int hrValue = values[dataStartIndex + i];
+
+    int currentDataPointTotalMinutes = _nextExpectedDataPointMinute + (i * 5);
+
+    int hour = (currentDataPointTotalMinutes ~/ 60) % 24;
+    int minute = currentDataPointTotalMinutes % 60;
+
+    String timeKey = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    _accumulatedHrData[timeKey] = hrValue;
+
+    lastDataPointMinuteInPacket = currentDataPointTotalMinutes;
   }
+
+  _nextExpectedDataPointMinute = lastDataPointMinuteInPacket + 5;
+
+  log('Parsed HR data for this packet. Last data point at: ${lastDataPointMinuteInPacket} mins. Next expected start: ${_nextExpectedDataPointMinute} mins.');
+}
   // Heart Rate
+  parseFirstHrData(List<int> values) {
+    Map hrDetails = {};
+    hrDetails = {
+      "00:00": values[6],
+      "00:05": values[7],
+      "00:10": values[8],
+      "00:15": values[9],
+      "00:20": values[10],
+      "00:25": values[11],
+      "00:30": values[12],
+      "00:35": values[13],
+      "00:40": values[14],
+    };
+    log('This is the Date Parsed $hrDetails');
+  }
+
+  // Parse Next HR Element
+  parseNextHrData(List<int> values) {
+    Map hrDetails = {};
+    hrDetails = {
+      "00:45": values[6],
+      "00:50": values[7],
+      "00:55": values[8],
+      "01:00": values[9],
+      "01:05": values[10],
+      "01:10": values[11],
+      "01:15": values[12],
+      "01:20": values[13],
+      "01:25": values[14],
+    };
+    log('This is the Date Parsed $hrDetails');
+  }
 
 // Function to convert an integer Unix timestamp to a 4-byte little-endian array
 
@@ -464,7 +577,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
         if (value[5] == value[6] - 1) {
           log("Accumated Data $jsonData");
           jsonData = [];
-          
         }
         // var recievedBattery = QCBandSDK.DataParsingWithData(value);
         // print(recievedBattery);
@@ -505,7 +617,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       if (value.isNotEmpty) {
-      print('Received notification: $value');
+        print('Received notification: $value');
 
         // var recievedBattery = QCBandSDK.DataParsingWithData(value);
         // print(recievedBattery);
