@@ -498,14 +498,15 @@ class _DeviceScreenState extends State<DeviceScreen> {
     return stepDetail;
   }
 
-  // Step Data of Today
+  // Heart Data of Today
   hrData() async {
     await _bluetoothCharacteristicWrite
         .write(QCBandSDK.getHRate(DateTime(2025, 6, 6).toString()));
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
-      print('Received notification: $value');
       if (value.isNotEmpty) {
+      print('Received notification: $value');
+
         // var recievedBattery = QCBandSDK.DataParsingWithData(value);
         // print(recievedBattery);
       }

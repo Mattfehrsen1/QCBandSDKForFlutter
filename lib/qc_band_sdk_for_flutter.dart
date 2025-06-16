@@ -160,10 +160,10 @@ class QCBandSDK {
       //   return ResolveUtil.getDeviceVersion(value);
       // case DeviceConst.CMD_Get_Name:
       //   return ResolveUtil.getDeviceName(value);
-      case QcBandSdkConst.cmdReadHrData:
-        // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
-        return ResolveUtil.handleIncomingDataHeartData(
-            Uint8List.fromList(value));
+      // case QcBandSdkConst.cmdReadHrData:
+      //   // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
+      //   return ResolveUtil.handleIncomingDataHeartData(
+      //       Uint8List.fromList(value));
       case QcBandSdkConst.cmdHrv:
         // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
         return ResolveUtil.getHrvTestData(value);
