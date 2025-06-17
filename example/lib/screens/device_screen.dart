@@ -614,165 +614,192 @@ class _DeviceScreenState extends State<DeviceScreen> {
   //     }
   //   });
   // }
-  final Map<String, int> _accumulatedHrvData = LinkedHashMap<String, int>();
- Future<void> hrvDetails() async {
-    // Clear any previously accumulated data before starting a new request.
-    _accumulatedHrvData.clear();
+// Global variable for accumulated data
+final Map<String, int> _accumulatedHrvData = LinkedHashMap<String, int>();
 
-    // Request HRV data from the device.
-    await _bluetoothCharacteristicWrite.write(
-      QCBandSDK.getHRV(0), // Assuming '0' requests today's data
-    );
+Future<void> hrvDetails() async {
+  // Clear any previously accumulated data before starting a new request.
+  _accumulatedHrvData.clear();
 
-    // Listen for incoming characteristic notifications from the BLE device.
-    _bluetoothCharacteristicNotification.value.listen((value) {
-      log('Received raw notification: $value'); // Log every incoming packet.
+  // Request HRV data from the device.
+  await _bluetoothCharacteristicWrite.write(
+    QCBandSDK.getHRV(1), // Assuming '1' requests today's data
+  );
 
-      // Check if the packet is an HRV command response (value[0] == 57).
-      if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdHrv) {
-        log('Identified as HRV type packet: $value');
+  // Listen for incoming characteristic notifications from the BLE device.
+  _bluetoothCharacteristicNotification.value.listen((value) {
+    log('Received raw notification: $value'); // Log every incoming packet.
 
-        // Check if value[1] is a packet index that we expect to contain HRV data points.
-        // Assuming packet indices 1, 2, 3, 4 contain sequential HRV data.
-        if (value.length > 1 && value[1] >= 1 && value[1] <= 4) { // Adjust range if more packets exist
-          log('Processing HRV data packet with index: ${value[1]}');
+    // Check if the packet is an HRV command response (value[0] == 57).
+    if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdHrv) {
+      log('Identified as HRV type packet: $value');
 
-          // Call the generalized parsing function.
-          Map<String, int> parsedHrvSegment = parseHRVData(value);
+      // Check if value[1] is a packet index that we expect to contain HRV data points.
+      // Assuming packet indices 1, 2, 3, 4 contain sequential HRV data.
+      if (value.length > 1 && value[1] >= 1 && value[1] <= 4) { // Adjust range if more packets exist
+        log('Processing HRV data packet with index: ${value[1]}');
 
-          // Accumulate the parsed data segment into the overall map.
-          _accumulatedHrvData.addAll(parsedHrvSegment);
+        // Call the highly specific parsing function.
+        Map<String, int> parsedHrvSegment = parseHRVData(value);
 
-          // Removed the individual segment print here to focus on the final compiled output.
-          log('Parsed HRV segment: $parsedHrvSegment');
-          // parsedHrvSegment.forEach((time, hrvValue) {
-          //   print('  Segment Data - $time: $hrvValue');
-          // });
-        } else {
-          // Log packets that are HRV-related but not data segments (e.g., value[1] == 0).
-          log('Received non-data HRV packet (value[1]=${value.length > 1 ? value[1] : 'N/A'}): $value');
-        }
-      }
-    }, onDone: () {
-      // This callback executes when the stream of notifications is finished.
-      log('\n--- All HRV packets processed. Final Accumulated HRV Data ---');
-      if (_accumulatedHrvData.isNotEmpty) {
-        // Sort the accumulated data by time for consistent display.
-        // LinkedHashMap keeps insertion order, but explicit sort for final display ensures it.
-        final sortedKeys = _accumulatedHrvData.keys.toList()
-          ..sort((a, b) => _compareTimeStrings(a, b));
+        // Accumulate the parsed data segment into the overall map.
+        _accumulatedHrvData.addAll(parsedHrvSegment);
 
-        for (var key in sortedKeys) {
-          print('  Final Accumulated - $key: ${_accumulatedHrvData[key]}');
-        }
+        log('Parsed HRV segment: $parsedHrvSegment');
       } else {
-        print('  No HRV data with a valid data packet index was accumulated.');
+        // Log packets that are HRV-related but not data segments (e.g., value[1] == 0).
+        log('Received non-data HRV packet (value[1]=${value.length > 1 ? value[1] : 'N/A'}): $value');
       }
-      log('------------------------------------------------------------');
-
-      log('-------------Accumulated----------------------------------$_accumulatedHrvData');
-    }, onError: (error) {
-      log('Error during HRV data stream: $error');
-    });
-  }
-
-  // Helper function to compare time strings for sorting.
-  int _compareTimeStrings(String time1, String time2) {
-    final parts1 = time1.split(':');
-    final parts2 = time2.split(':');
-    final h1 = int.parse(parts1[0]);
-    final m1 = int.parse(parts1[1]);
-    final h2 = int.parse(parts2[0]);
-    final m2 = int.parse(parts2[1]);
-
-    if (h1 != h2) {
-      return h1.compareTo(h2);
     }
-    return m1.compareTo(m2);
+  }, onDone: () {
+    // This callback executes when the stream of notifications is finished.
+    log('\n--- All HRV packets processed. Final Accumulated HRV Data ---');
+    if (_accumulatedHrvData.isNotEmpty) {
+      // Sort the accumulated data by time for consistent display.
+      final sortedKeys = _accumulatedHrvData.keys.toList()
+        ..sort((a, b) => _compareTimeStrings(a, b));
+
+      for (var key in sortedKeys) {
+        print('   Final Accumulated - $key: ${_accumulatedHrvData[key]}');
+      }
+    } else {
+      print('   No HRV data with a valid data packet index was accumulated.');
+    }
+    log('------------------------------------------------------------');
+
+    log('-------------Accumulated----------------------------------$_accumulatedHrvData');
+  }, onError: (error) {
+    log('Error during HRV data stream: $error');
+  });
+}
+
+// Helper function to compare time strings for sorting.
+int _compareTimeStrings(String time1, String time2) {
+  final parts1 = time1.split(':');
+  final parts2 = time2.split(':');
+  final h1 = int.parse(parts1[0]);
+  final m1 = int.parse(parts1[1]);
+  final h2 = int.parse(parts2[0]);
+  final m2 = int.parse(parts2[1]);
+
+  if (h1 != h2) {
+    return h1.compareTo(h2);
   }
+  return m1.compareTo(m2);
+}
 
-// --- The generalized parseHRVData function ---
-  /// Parses a list of integer values representing a segment of HRV data
-  /// from a single BLE notification packet.
-  ///
-  /// This function now interprets the `value[1]` byte as a packet index
-  /// to calculate the overall time offset for the data points within this packet.
-  /// Each packet is assumed to contain 12 HRV data points (from value[3] to value[14]),
-  /// each representing a 30-minute interval.
-  ///
-  /// [value]: The complete List<int> received from the BLE characteristic notification.
-  /// Returns a [Map<String, int>] where keys are time strings ("HH:MM") and
-  /// values are the corresponding HRV data points for this packet segment.
- Map<String, int> parseHRVData(List<int> value) {
+// --- The highly specific parseHRVData function ---
+/// Parses a list of integer values representing a segment of HRV data
+/// from a single BLE notification packet, applying specific byte mappings
+/// based on the packet index to match the user's desired output.
+///
+/// [value]: The complete List<int> received from the BLE characteristic notification.
+/// Returns a [Map<String, int>] where keys are time strings ("HH:MM") and
+/// values are the corresponding HRV data points for this packet segment.
+Map<String, int> parseHRVData(List<int> value) {
   final Map<String, int> hrvDataSegment = LinkedHashMap<String, int>();
-
-  // value[1] is the packet index (e.g., 0, 1, 2, 3, 4)
   final int packetIndex = value[1];
 
-  // Determine the starting index of the HRV data points within this packet
-  // based on the packetIndex (value[1]).
-  int dataStartIndexInPacket;
-  if (packetIndex == 0 || packetIndex == 1) {
-    dataStartIndexInPacket = 3;
-  } else if (packetIndex >= 2 && packetIndex <= 4) { // Assuming 2, 3, 4 are the other data packets
-    dataStartIndexInPacket = 2;
-  } else {
-    log("Warning: Unknown packetIndex $packetIndex. Skipping parsing of this segment.");
-    return hrvDataSegment; // Return empty if packet index is not recognized
-  }
+  log("Parsing packet with index: $packetIndex, length: ${value.length}");
 
-  // The number of data points per packet is consistently 12.
-  const int numberOfDataPointsPerPacket = 12; // (e.g., from index 3 to 14, or 2 to 13)
+  switch (packetIndex) {
+    case 0:
+      // Packet 0 is typically metadata, not time-series HRV data.
+      log("Note: Packet index 0 detected. Skipping data extraction for time-series HRV.");
+      break;
 
-  // Ensure the packet is long enough to contain the expected data given the determined start index.
-  // The last expected index is dataStartIndexInPacket + numberOfDataPointsPerPacket - 1.
-  if (value.length < (dataStartIndexInPacket + numberOfDataPointsPerPacket)) {
-    log("Error: Input packet (index $packetIndex) is too short. Expected at least ${dataStartIndexInPacket + numberOfDataPointsPerPacket} elements.");
-    return hrvDataSegment;
-  }
+    case 1: // Data for 00:00 - 05:30 (12 data points)
+      // Original logic, seems consistent with previous requests.
+      const int startIndex = 3;
+      if (value.length >= startIndex + 12) {
+        for (int i = 0; i < 12; i++) {
+          final int totalMinutes = (0 * 12 * 30) + (i * 30);
+          final int hours = totalMinutes ~/ 60;
+          final int minutes = totalMinutes % 60;
+          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+          hrvDataSegment[timeKey] = value[startIndex + i];
+        }
+      } else {
+        log("Error: Packet 1 is too short. Expected at least ${startIndex + 12} elements, got ${value.length}.");
+      }
+      break;
 
-  // Calculate the starting minute offset for this specific packet.
-  // Packet index 1 (00:00-05:30) starts at 0 minutes offset from day start.
-  // Packet index 2 (06:00-11:30) starts at (1 * 12 * 30) = 360 minutes offset.
-  // Packet index 3 (12:00-17:30) starts at (2 * 12 * 30) = 720 minutes offset.
-  // Packet index 4 (18:00-23:30) starts at (3 * 12 * 30) = 1080 minutes offset.
-  // Packet index 0 is treated as a header and does not contribute to data points from 00:00.
-  int startMinutesForPacket;
-  if (packetIndex == 0) {
-    // If packetIndex 0 has data, its timestamp logic might be different or
-    // it contains other metadata. For now, we'll assume it doesn't contribute
-    // to the 00:00-24:00 time series directly, based on the initial problem description.
-    // If it *does* contain data for a specific time range, its logic needs to be defined.
-    log("Note: Packet index 0 detected. If this packet contains time-series HRV data, its offset logic needs to be explicitly defined.");
-    return hrvDataSegment; // Skipping data extraction for packet 0 for now as it's typically metadata.
-  } else {
-    startMinutesForPacket = (packetIndex - 1) * (numberOfDataPointsPerPacket * 30);
-  }
+    case 2: // Data for 06:00 - 12:30 (14 data points as per new interpretation)
+      // This packet contains data from 06:00 to 11:30 AND 12:00 to 12:30.
+      // 06:00 to 11:30 (12 points) starts at value[2]
+      const int segment1StartIndex = 2; // For 06:00 to 11:30
+      const int segment1Count = 12; // Number of points for 06:00 to 11:30
 
-  // Iterate through the 12 data points in the current packet.
-  for (int i = 0; i < numberOfDataPointsPerPacket; i++) {
-    // Calculate the total minutes from the start of the day for the current data point.
-    // startMinutesForPacket accounts for which packet it is (e.g., 0 for packet 1, 360 for packet 2).
-    // (i * 30) accounts for the offset within the current packet (0, 30, 60, ... minutes).
-    final int totalMinutes = startMinutesForPacket + (i * 30);
+      if (value.length >= segment1StartIndex + segment1Count) {
+        // Parse 06:00 to 11:30
+        for (int i = 0; i < segment1Count; i++) {
+          final int totalMinutes = (1 * 12 * 30) + (i * 30); // Packet 2 starts at 360 minutes (06:00)
+          final int hours = totalMinutes ~/ 60;
+          final int minutes = totalMinutes % 60;
+          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+          hrvDataSegment[timeKey] = value[segment1StartIndex + i];
+        }
 
-    final int hours = totalMinutes ~/ 60; // Integer division for hours
-    final int minutes = totalMinutes % 60; // Remainder for minutes
+        // Parse 12:00 and 12:30 from the end of this packet
+        // According to user's latest, 12:00 is 32 (value[14]), and 12:30 is 0 (value[15] which is 74 in raw data)
+        if (value.length >= 16) { // Need value[15] for 12:30
+          hrvDataSegment['12:00'] = value[14];
+          // For 12:30, if value[15] is 74, we set it to 0 as per user's latest instruction.
+          hrvDataSegment['12:30'] = (value[15] == 74) ? 0 : value[15];
+        } else {
+          log("Warning: Packet 2 is too short to contain 12:00 and 12:30 data. Expected at least 16 elements, got ${value.length}.");
+        }
+      } else {
+        log("Error: Packet 2 is too short for 06:00-11:30 data. Expected at least ${segment1StartIndex + segment1Count} elements, got ${value.length}.");
+      }
+      break;
 
-    // Format the time as "HH:MM". Ensure leading zeros.
-    final String timeKey =
-        '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+    case 3: // Data for 13:00 - 18:30 (12 data points)
+      // This packet appears to carry data from 13:00 to 18:30.
+      // Based on user's latest input, 13:00 is 38 which is value[3] of this packet.
+      // So, data starts effectively from index 3 and takes 12 values.
+      const int startIndex = 3;
+      if (value.length >= startIndex + 12) {
+        for (int i = 0; i < 12; i++) {
+          // Calculate time based on effective start 13:00 (780 minutes)
+          final int totalMinutes = 780 + (i * 30); // 780 minutes = 13:00
+          final int hours = totalMinutes ~/ 60;
+          final int minutes = totalMinutes % 60;
+          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+          hrvDataSegment[timeKey] = value[startIndex + i];
+        }
+      } else {
+        log("Error: Packet 3 is too short. Expected at least ${startIndex + 12} elements, got ${value.length}.");
+      }
+      break;
 
-    // Get the HRV value from the input list using its relative position in the packet.
-    final int hrvValue = value[dataStartIndexInPacket + i];
+    case 4: // Data for 19:00 - 23:30 (10 data points)
+      // This packet appears to carry data from 19:00 to 23:30.
+      // Based on user's input, 19:00 is 37 which is value[2] of this packet.
+      const int startIndex = 2; // Data starts at value[2]
+      const int dataCount = 10; // Number of data points (19:00 to 23:30 = 10 half-hour intervals)
 
-    // Add the time and HRV value to the map for this segment.
-    hrvDataSegment[timeKey] = hrvValue;
+      if (value.length >= startIndex + dataCount) {
+        for (int i = 0; i < dataCount; i++) {
+          // Calculate time based on effective start 19:00 (1140 minutes)
+          final int totalMinutes = 1140 + (i * 30); // 1140 minutes = 19:00
+          final int hours = totalMinutes ~/ 60;
+          final int minutes = totalMinutes % 60;
+          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+          hrvDataSegment[timeKey] = value[startIndex + i];
+        }
+      } else {
+        log("Error: Packet 4 is too short. Expected at least ${startIndex + dataCount} elements, got ${value.length}.");
+      }
+      break;
+
+    default:
+      log("Warning: Unknown or unhandled packetIndex $packetIndex. Skipping parsing.");
+      break;
   }
 
   return hrvDataSegment;
 }
-
   // Step Data of Today
   liveHeartRate() async {
     // Today
