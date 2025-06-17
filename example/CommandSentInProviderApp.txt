@@ -1,19 +1,20 @@
 Command in the When Provider App Starts: 
-1. 47
-2. 1
-3. 60
-4. 97
+qc_const mean according to Documentation from. 
+1. 47 [cmdPackageLength qc_const]
+2. 1 [ACTION_START qc_const]
+3. 60 [cmdDeviceFunctionSupport qc_const]
+4. 97 [cmdGetAncsOnOff qc_const]
 5. 3 [Battery Command]
-6. 44
-7.22
-8.56
+6. 44 [cmdAutoBloodOxygen qc_const]
+7.22 [ cmdHrData qc_const]
+8.56 [cmdHrvEnable qc_const]
 9.67 [ Step Details Command]
-10. 54 
-11. 12
-12. 133
-13. 25
-14. 10
-15. 6
+10. 54 [cmdPressureSetting qc_const]
+11. 12 [cmdBpTimingMonitorSwitch qc_const]
+12. 133 [Did not Find it]
+13. 25 [cmdGetDegreeSwitch qc_const]
+14. 10 [cmdGetTimeSetting qc_const]
+15. 6 [cmdMute qc_const]
 16. 33
 17. 96
 18. 178
@@ -23,7 +24,7 @@ Command in the When Provider App Starts:
 22. 47
 23. 1
 24. 72 
-25. 67 []
+25. 67 [ Duplicate Step Details Command]
 26. 55 
 27. 21 [ Heart Beat Command ]
 28. 13
