@@ -615,191 +615,200 @@ class _DeviceScreenState extends State<DeviceScreen> {
   //   });
   // }
 // Global variable for accumulated data
-final Map<String, int> _accumulatedHrvData = LinkedHashMap<String, int>();
+  final Map<String, int> _accumulatedHrvData = LinkedHashMap<String, int>();
 
-Future<void> hrvDetails() async {
-  // Clear any previously accumulated data before starting a new request.
-  _accumulatedHrvData.clear();
+  Future<void> hrvDetails() async {
+    // Clear any previously accumulated data before starting a new request.
+    _accumulatedHrvData.clear();
 
-  // Request HRV data from the device.
-  await _bluetoothCharacteristicWrite.write(
-    QCBandSDK.getHRV(1), // Assuming '1' requests today's data
-  );
+    // Request HRV data from the device.
+    await _bluetoothCharacteristicWrite.write(
+      QCBandSDK.getHRV(1), // Assuming '1' requests today's data
+    );
 
-  // Listen for incoming characteristic notifications from the BLE device.
-  _bluetoothCharacteristicNotification.value.listen((value) {
-    log('Received raw notification: $value'); // Log every incoming packet.
+    // Listen for incoming characteristic notifications from the BLE device.
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      log('Received raw notification: $value'); // Log every incoming packet.
 
-    // Check if the packet is an HRV command response (value[0] == 57).
-    if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdHrv) {
-      log('Identified as HRV type packet: $value');
+      // Check if the packet is an HRV command response (value[0] == 57).
+      if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdHrv) {
+        log('Identified as HRV type packet: $value');
 
-      // Check if value[1] is a packet index that we expect to contain HRV data points.
-      // Assuming packet indices 1, 2, 3, 4 contain sequential HRV data.
-      if (value.length > 1 && value[1] >= 1 && value[1] <= 4) { // Adjust range if more packets exist
-        log('Processing HRV data packet with index: ${value[1]}');
+        // Check if value[1] is a packet index that we expect to contain HRV data points.
+        // Assuming packet indices 1, 2, 3, 4 contain sequential HRV data.
+        if (value.length > 1 && value[1] >= 1 && value[1] <= 4) {
+          // Adjust range if more packets exist
+          log('Processing HRV data packet with index: ${value[1]}');
 
-        // Call the highly specific parsing function.
-        Map<String, int> parsedHrvSegment = parseHRVData(value);
+          // Call the highly specific parsing function.
+          Map<String, int> parsedHrvSegment = parseHRVData(value);
 
-        // Accumulate the parsed data segment into the overall map.
-        _accumulatedHrvData.addAll(parsedHrvSegment);
+          // Accumulate the parsed data segment into the overall map.
+          _accumulatedHrvData.addAll(parsedHrvSegment);
 
-        log('Parsed HRV segment: $parsedHrvSegment');
+          log('Parsed HRV segment: $parsedHrvSegment');
+        } else {
+          // Log packets that are HRV-related but not data segments (e.g., value[1] == 0).
+          log('Received non-data HRV packet (value[1]=${value.length > 1 ? value[1] : 'N/A'}): $value');
+        }
+      }
+    }, onDone: () {
+      // This callback executes when the stream of notifications is finished.
+      log('\n--- All HRV packets processed. Final Accumulated HRV Data ---');
+      if (_accumulatedHrvData.isNotEmpty) {
+        // Sort the accumulated data by time for consistent display.
+        final sortedKeys = _accumulatedHrvData.keys.toList()
+          ..sort((a, b) => _compareTimeStrings(a, b));
+
+        for (var key in sortedKeys) {
+          print('   Final Accumulated - $key: ${_accumulatedHrvData[key]}');
+        }
       } else {
-        // Log packets that are HRV-related but not data segments (e.g., value[1] == 0).
-        log('Received non-data HRV packet (value[1]=${value.length > 1 ? value[1] : 'N/A'}): $value');
+        print('   No HRV data with a valid data packet index was accumulated.');
       }
-    }
-  }, onDone: () {
-    // This callback executes when the stream of notifications is finished.
-    log('\n--- All HRV packets processed. Final Accumulated HRV Data ---');
-    if (_accumulatedHrvData.isNotEmpty) {
-      // Sort the accumulated data by time for consistent display.
-      final sortedKeys = _accumulatedHrvData.keys.toList()
-        ..sort((a, b) => _compareTimeStrings(a, b));
+      log('------------------------------------------------------------');
 
-      for (var key in sortedKeys) {
-        print('   Final Accumulated - $key: ${_accumulatedHrvData[key]}');
-      }
-    } else {
-      print('   No HRV data with a valid data packet index was accumulated.');
-    }
-    log('------------------------------------------------------------');
-
-    log('-------------Accumulated----------------------------------$_accumulatedHrvData');
-  }, onError: (error) {
-    log('Error during HRV data stream: $error');
-  });
-}
+      log('-------------Accumulated----------------------------------$_accumulatedHrvData');
+    }, onError: (error) {
+      log('Error during HRV data stream: $error');
+    });
+  }
 
 // Helper function to compare time strings for sorting.
-int _compareTimeStrings(String time1, String time2) {
-  final parts1 = time1.split(':');
-  final parts2 = time2.split(':');
-  final h1 = int.parse(parts1[0]);
-  final m1 = int.parse(parts1[1]);
-  final h2 = int.parse(parts2[0]);
-  final m2 = int.parse(parts2[1]);
+  int _compareTimeStrings(String time1, String time2) {
+    final parts1 = time1.split(':');
+    final parts2 = time2.split(':');
+    final h1 = int.parse(parts1[0]);
+    final m1 = int.parse(parts1[1]);
+    final h2 = int.parse(parts2[0]);
+    final m2 = int.parse(parts2[1]);
 
-  if (h1 != h2) {
-    return h1.compareTo(h2);
+    if (h1 != h2) {
+      return h1.compareTo(h2);
+    }
+    return m1.compareTo(m2);
   }
-  return m1.compareTo(m2);
-}
 
 // --- The highly specific parseHRVData function ---
-/// Parses a list of integer values representing a segment of HRV data
-/// from a single BLE notification packet, applying specific byte mappings
-/// based on the packet index to match the user's desired output.
-///
-/// [value]: The complete List<int> received from the BLE characteristic notification.
-/// Returns a [Map<String, int>] where keys are time strings ("HH:MM") and
-/// values are the corresponding HRV data points for this packet segment.
-Map<String, int> parseHRVData(List<int> value) {
-  final Map<String, int> hrvDataSegment = LinkedHashMap<String, int>();
-  final int packetIndex = value[1];
+  /// Parses a list of integer values representing a segment of HRV data
+  /// from a single BLE notification packet, applying specific byte mappings
+  /// based on the packet index to match the user's desired output.
+  ///
+  /// [value]: The complete List<int> received from the BLE characteristic notification.
+  /// Returns a [Map<String, int>] where keys are time strings ("HH:MM") and
+  /// values are the corresponding HRV data points for this packet segment.
+  Map<String, int> parseHRVData(List<int> value) {
+    final Map<String, int> hrvDataSegment = LinkedHashMap<String, int>();
+    final int packetIndex = value[1];
 
-  log("Parsing packet with index: $packetIndex, length: ${value.length}");
+    log("Parsing packet with index: $packetIndex, length: ${value.length}");
 
-  switch (packetIndex) {
-    case 0:
-      // Packet 0 is typically metadata, not time-series HRV data.
-      log("Note: Packet index 0 detected. Skipping data extraction for time-series HRV.");
-      break;
+    switch (packetIndex) {
+      case 0:
+        // Packet 0 is typically metadata, not time-series HRV data.
+        log("Note: Packet index 0 detected. Skipping data extraction for time-series HRV.");
+        break;
 
-    case 1: // Data for 00:00 - 05:30 (12 data points)
-      // Original logic, seems consistent with previous requests.
-      const int startIndex = 3;
-      if (value.length >= startIndex + 12) {
-        for (int i = 0; i < 12; i++) {
-          final int totalMinutes = (0 * 12 * 30) + (i * 30);
-          final int hours = totalMinutes ~/ 60;
-          final int minutes = totalMinutes % 60;
-          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
-          hrvDataSegment[timeKey] = value[startIndex + i];
-        }
-      } else {
-        log("Error: Packet 1 is too short. Expected at least ${startIndex + 12} elements, got ${value.length}.");
-      }
-      break;
-
-    case 2: // Data for 06:00 - 12:30 (14 data points as per new interpretation)
-      // This packet contains data from 06:00 to 11:30 AND 12:00 to 12:30.
-      // 06:00 to 11:30 (12 points) starts at value[2]
-      const int segment1StartIndex = 2; // For 06:00 to 11:30
-      const int segment1Count = 12; // Number of points for 06:00 to 11:30
-
-      if (value.length >= segment1StartIndex + segment1Count) {
-        // Parse 06:00 to 11:30
-        for (int i = 0; i < segment1Count; i++) {
-          final int totalMinutes = (1 * 12 * 30) + (i * 30); // Packet 2 starts at 360 minutes (06:00)
-          final int hours = totalMinutes ~/ 60;
-          final int minutes = totalMinutes % 60;
-          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
-          hrvDataSegment[timeKey] = value[segment1StartIndex + i];
-        }
-
-        // Parse 12:00 and 12:30 from the end of this packet
-        // According to user's latest, 12:00 is 32 (value[14]), and 12:30 is 0 (value[15] which is 74 in raw data)
-        if (value.length >= 16) { // Need value[15] for 12:30
-          hrvDataSegment['12:00'] = value[14];
-          // For 12:30, if value[15] is 74, we set it to 0 as per user's latest instruction.
-          hrvDataSegment['12:30'] = (value[15] == 74) ? 0 : value[15];
+      case 1: // Data for 00:00 - 05:30 (12 data points)
+        // Original logic, seems consistent with previous requests.
+        const int startIndex = 3;
+        if (value.length >= startIndex + 12) {
+          for (int i = 0; i < 12; i++) {
+            final int totalMinutes = (0 * 12 * 30) + (i * 30);
+            final int hours = totalMinutes ~/ 60;
+            final int minutes = totalMinutes % 60;
+            final String timeKey =
+                '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+            hrvDataSegment[timeKey] = value[startIndex + i];
+          }
         } else {
-          log("Warning: Packet 2 is too short to contain 12:00 and 12:30 data. Expected at least 16 elements, got ${value.length}.");
+          log("Error: Packet 1 is too short. Expected at least ${startIndex + 12} elements, got ${value.length}.");
         }
-      } else {
-        log("Error: Packet 2 is too short for 06:00-11:30 data. Expected at least ${segment1StartIndex + segment1Count} elements, got ${value.length}.");
-      }
-      break;
+        break;
 
-    case 3: // Data for 13:00 - 18:30 (12 data points)
-      // This packet appears to carry data from 13:00 to 18:30.
-      // Based on user's latest input, 13:00 is 38 which is value[3] of this packet.
-      // So, data starts effectively from index 3 and takes 12 values.
-      const int startIndex = 3;
-      if (value.length >= startIndex + 12) {
-        for (int i = 0; i < 12; i++) {
-          // Calculate time based on effective start 13:00 (780 minutes)
-          final int totalMinutes = 780 + (i * 30); // 780 minutes = 13:00
-          final int hours = totalMinutes ~/ 60;
-          final int minutes = totalMinutes % 60;
-          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
-          hrvDataSegment[timeKey] = value[startIndex + i];
+      case 2: // Data for 06:00 - 12:30 (14 data points as per new interpretation)
+        // This packet contains data from 06:00 to 11:30 AND 12:00 to 12:30.
+        // 06:00 to 11:30 (12 points) starts at value[2]
+        const int segment1StartIndex = 2; // For 06:00 to 11:30
+        const int segment1Count = 12; // Number of points for 06:00 to 11:30
+
+        if (value.length >= segment1StartIndex + segment1Count) {
+          // Parse 06:00 to 11:30
+          for (int i = 0; i < segment1Count; i++) {
+            final int totalMinutes = (1 * 12 * 30) +
+                (i * 30); // Packet 2 starts at 360 minutes (06:00)
+            final int hours = totalMinutes ~/ 60;
+            final int minutes = totalMinutes % 60;
+            final String timeKey =
+                '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+            hrvDataSegment[timeKey] = value[segment1StartIndex + i];
+          }
+
+          // Parse 12:00 and 12:30 from the end of this packet
+          // According to user's latest, 12:00 is 32 (value[14]), and 12:30 is 0 (value[15] which is 74 in raw data)
+          if (value.length >= 16) {
+            // Need value[15] for 12:30
+            hrvDataSegment['12:00'] = value[14];
+            // For 12:30, if value[15] is 74, we set it to 0 as per user's latest instruction.
+            hrvDataSegment['12:30'] = (value[15] == 74) ? 0 : value[15];
+          } else {
+            log("Warning: Packet 2 is too short to contain 12:00 and 12:30 data. Expected at least 16 elements, got ${value.length}.");
+          }
+        } else {
+          log("Error: Packet 2 is too short for 06:00-11:30 data. Expected at least ${segment1StartIndex + segment1Count} elements, got ${value.length}.");
         }
-      } else {
-        log("Error: Packet 3 is too short. Expected at least ${startIndex + 12} elements, got ${value.length}.");
-      }
-      break;
+        break;
 
-    case 4: // Data for 19:00 - 23:30 (10 data points)
-      // This packet appears to carry data from 19:00 to 23:30.
-      // Based on user's input, 19:00 is 37 which is value[2] of this packet.
-      const int startIndex = 2; // Data starts at value[2]
-      const int dataCount = 10; // Number of data points (19:00 to 23:30 = 10 half-hour intervals)
-
-      if (value.length >= startIndex + dataCount) {
-        for (int i = 0; i < dataCount; i++) {
-          // Calculate time based on effective start 19:00 (1140 minutes)
-          final int totalMinutes = 1140 + (i * 30); // 1140 minutes = 19:00
-          final int hours = totalMinutes ~/ 60;
-          final int minutes = totalMinutes % 60;
-          final String timeKey = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
-          hrvDataSegment[timeKey] = value[startIndex + i];
+      case 3: // Data for 13:00 - 18:30 (12 data points)
+        // This packet appears to carry data from 13:00 to 18:30.
+        // Based on user's latest input, 13:00 is 38 which is value[3] of this packet.
+        // So, data starts effectively from index 3 and takes 12 values.
+        const int startIndex = 3;
+        if (value.length >= startIndex + 12) {
+          for (int i = 0; i < 12; i++) {
+            // Calculate time based on effective start 13:00 (780 minutes)
+            final int totalMinutes = 780 + (i * 30); // 780 minutes = 13:00
+            final int hours = totalMinutes ~/ 60;
+            final int minutes = totalMinutes % 60;
+            final String timeKey =
+                '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+            hrvDataSegment[timeKey] = value[startIndex + i];
+          }
+        } else {
+          log("Error: Packet 3 is too short. Expected at least ${startIndex + 12} elements, got ${value.length}.");
         }
-      } else {
-        log("Error: Packet 4 is too short. Expected at least ${startIndex + dataCount} elements, got ${value.length}.");
-      }
-      break;
+        break;
 
-    default:
-      log("Warning: Unknown or unhandled packetIndex $packetIndex. Skipping parsing.");
-      break;
+      case 4: // Data for 19:00 - 23:30 (10 data points)
+        // This packet appears to carry data from 19:00 to 23:30.
+        // Based on user's input, 19:00 is 37 which is value[2] of this packet.
+        const int startIndex = 2; // Data starts at value[2]
+        const int dataCount =
+            10; // Number of data points (19:00 to 23:30 = 10 half-hour intervals)
+
+        if (value.length >= startIndex + dataCount) {
+          for (int i = 0; i < dataCount; i++) {
+            // Calculate time based on effective start 19:00 (1140 minutes)
+            final int totalMinutes = 1140 + (i * 30); // 1140 minutes = 19:00
+            final int hours = totalMinutes ~/ 60;
+            final int minutes = totalMinutes % 60;
+            final String timeKey =
+                '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+            hrvDataSegment[timeKey] = value[startIndex + i];
+          }
+        } else {
+          log("Error: Packet 4 is too short. Expected at least ${startIndex + dataCount} elements, got ${value.length}.");
+        }
+        break;
+
+      default:
+        log("Warning: Unknown or unhandled packetIndex $packetIndex. Skipping parsing.");
+        break;
+    }
+
+    return hrvDataSegment;
   }
 
-  return hrvDataSegment;
-}
   // Step Data of Today
   liveHeartRate() async {
     // Today
@@ -809,10 +818,10 @@ Map<String, int> parseHRVData(List<int> value) {
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
-      if (value.isNotEmpty && value[0] == QcBandSdkConst.liveHeart) {
-        var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+      if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
         // print(recievedHRVData);
-        log('Received HRV: $recievedHRVData');
+        log('Received HRV: ${value[1]}');
       }
     });
   }
@@ -892,14 +901,15 @@ Map<String, int> parseHRVData(List<int> value) {
               //     },
               //     child: Text('Device Callibaration')),
               TextButton(
-                  onPressed: () {
-                    // Notify Listenner of the Command
-                    // getDeviceBattery();
-                    //Send Command
-                    stepData();
-                    // Parse Response
-                  },
-                  child: Text('Device Step Data')),
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  stepData();
+                  // Parse Response
+                },
+                child: Text('Device Step Data'),
+              ),
               TextButton(
                   onPressed: () {
                     // Notify Listenner of the Command
@@ -951,6 +961,84 @@ Map<String, int> parseHRVData(List<int> value) {
                   // Parse Response
                 },
                 child: Text('Sleep Details Data'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Get BloodOxygen History'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Get BloodPressure History'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Get Device Details'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Set User Details'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Get Alarm'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Set Alarm'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Notify Listenner of the Command
+                  // getDeviceBattery();
+                  //Send Command
+                  // TODO: // Working Need Work on Parsing
+                  // sleepDetailData();
+                  // Parse Response
+                },
+                child: Text('Start WorkOut'),
               ),
             ],
           ),

@@ -15,8 +15,8 @@ qc_const mean according to Documentation from.
 13. 25 [cmdGetDegreeSwitch qc_const]
 14. 10 [cmdGetTimeSetting qc_const]
 15. 6 [cmdMute qc_const]
-16. 33
-17. 96
+16. 33 [ Set Goals , cmdTargetSetting]
+17. 96 
 18. 178
 19. 43
 20. 154
