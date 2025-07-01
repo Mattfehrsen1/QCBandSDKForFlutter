@@ -813,7 +813,7 @@ class QCBandSDK {
 
     // Step 2: Place the command code and payload bytes
 
-    value[0] = 68; // Main Command Code (decimal 68)
+    value[0] = 55; // Main Command Code (decimal 68)
 
     value[1] = dayOffset;
 

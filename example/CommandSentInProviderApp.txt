@@ -16,12 +16,12 @@ qc_const mean according to Documentation from.
 14. 10 [cmdGetTimeSetting qc_const]
 15. 6 [cmdMute qc_const]
 16. 33 [ Set Goals , cmdTargetSetting]
-17. 96 
-18. 178
-19. 43
-20. 154
-21. 10
-22. 47
+17. 96 [ Something to do with apple health notification]
+18. 178 😞
+19. 43 😞
+20. 154😞
+21. 10😞
+22. 47😞
 23. 1
 24. 72 
 25. 67 [ Duplicate Step Details Command]
