@@ -844,7 +844,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   deviceTimeSet() async {
-    // Today
+  
     await _bluetoothCharacteristicWrite.write(
       QCBandSDK.setDeviceTime(1),
     );
