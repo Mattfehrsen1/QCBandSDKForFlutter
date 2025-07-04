@@ -681,6 +681,32 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  static Uint8List setDeviceTime(int offsetSeconds) {
+    final List<int> value = _generateInitValue();
+    final now = DateTime.now().add(Duration(seconds: offsetSeconds));
+
+    final year = now.year % 2000; // As per Java code: calendar.get(1) % 2000
+    final month = now.month; // As per Java code: calendar.get(2) + 1
+    final day = now.day; // As per Java code: calendar.get(5)
+    final hour = now.hour; // As per Java code: calendar.get(11)
+    final minute = now.minute; // As per Java code: calendar.get(12)
+    final second = now.second; // As per Java code: calendar.get(13)
+
+    final languageByte = ResolveUtil().getLanguageByte();
+
+    value[0] = ResolveUtil().decimalToBCD(year);
+    value[1] = ResolveUtil().decimalToBCD(month);
+    value[2] = ResolveUtil().decimalToBCD(day);
+    value[3] = ResolveUtil().decimalToBCD(hour);
+    value[4] = ResolveUtil().decimalToBCD(minute);
+    value[5] = ResolveUtil().decimalToBCD(second);
+    value[6] = languageByte; // mData[6] = mLanguage
+
+    value[0] = QcBandSdkConst.cmdGetDeviceElectricityValue;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {
     final List<int> value = [

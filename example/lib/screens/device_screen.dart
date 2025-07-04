@@ -818,7 +818,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
-      if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
+      if (value.isNotEmpty &&
+          value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
         // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
         // print(recievedHRVData);
         log('Received HRV: ${value[1]}');
@@ -830,6 +831,22 @@ class _DeviceScreenState extends State<DeviceScreen> {
     // Today
     await _bluetoothCharacteristicWrite.write(
       QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
+    );
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        // log('Received Sleep: $value');
+      }
+    });
+  }
+
+  deviceTimeSet() async {
+    // Today
+    await _bluetoothCharacteristicWrite.write(
+      QCBandSDK.setDeviceTime(1),
     );
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
@@ -998,14 +1015,15 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
-                  // sleepDetailData();
-                  // Parse Response
+                  // TODO: // Set Device Time
+                  // Steps to Complete
+                  // 1. BCD Conversion Helper [Done] Implemented on the resolve_util.dart
+                  // 2. Language Mapping [Done] Implemented on the resolve_util.dart
+                  // 3. Constructing the Payload [Done] Implemented in qc_band_sdk_for_flutter
+                  // 4. Equivalent Write Operation in flutter_blue_plus
+                  deviceTimeSet();
                 },
-                child: Text('Set User Details'),
+                child: Text('Set Time'),
               ),
               TextButton(
                 onPressed: () {

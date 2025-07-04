@@ -6,6 +6,7 @@ import '../bean/models.dart';
 import '../qc_band_sdk_for_flutter.dart';
 import 'devicekey.dart';
 import 'qc_band_sdk_const.dart';
+import 'package:intl/intl.dart';
 // import 'ble_const.dart';
 // import '../ble_sdk.dart';
 
@@ -1811,4 +1812,59 @@ class ResolveUtil {
 //     maps.addAll({DeviceKey.Data: mapData});
 //     return maps;
 //   }
+
+int decimalToBCD(int decimal) {
+  if (decimal < 0 || decimal > 99) {
+    throw ArgumentError("Decimal value must be between 0 and 99 for BCD conversion.");
+  }
+  return ((decimal ~/ 10) << 4) | (decimal % 10);
+}
+// Map similar to the Java mLocaleMap
+final Map<String, int> _localeMap = {
+  "zh_CN": 0,
+  "en": 1,
+  "zh_HK": 2,
+  "zh_TW": 2,
+  "el": 3,
+  "fr": 4,
+  "de": 5,
+  "it": 6,
+  "es": 7,
+  "nl": 8,
+  "pt": 9,
+  "ru": 10,
+  "tr": 11,
+  "ja": 12,
+  "ko": 13,
+  "pl": 14,
+  "ro": 15,
+  "ar": 16,
+  "th": 17,
+  "vi": 18,
+  "in": 19,
+  // Add other locales as needed if your device supports them
+};
+
+// Function to get the language byte
+int getLanguageByte() {
+  // Use `Platform.localeName` or `Intl.getCurrentLocale()` for current locale
+  // For simplicity, using `Intl.getCurrentLocale()` from `package:intl`
+  // You might need to import 'dart:io' for `Platform.localeName` in a real app.
+  // For browser, `dart:html` might be needed, or consider `package:device_info_plus`.
+  String currentLocale = Intl.getCurrentLocale(); // e.g., "en_US", "zh_CN"
+
+  String language = currentLocale.split('_')[0]; // "en", "zh"
+  String country = currentLocale.length > 2 ? currentLocale.split('_')[1] : '';
+
+  String key = language;
+  if (language.startsWith("zh") && country.isNotEmpty) {
+    key = "${language}_$country";
+  }
+
+  // Debugging log similar to Java code
+  print("SetTimeReq -> mLanguage: $key, value: ${_localeMap[key]}");
+
+  // Default to English (1) if locale not found, similar to Java code
+  return _localeMap[key] ?? 1;
+}
 }
