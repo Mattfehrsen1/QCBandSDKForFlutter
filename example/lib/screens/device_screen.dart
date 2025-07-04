@@ -844,9 +844,25 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   deviceTimeSet() async {
-  // Tested it as document in the response we should know whether some functionality are supported or not. 
+    // Tested it as document in the response we should know whether some functionality are supported or not.
     await _bluetoothCharacteristicWrite.write(
       QCBandSDK.setDeviceTime(1),
+    );
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        // log('Received Sleep: $value');
+      }
+    });
+  }
+
+  getBloodOxygen() async {
+    // Testing to send raw command on ACTION_Blood_Oxygen = 42 and see how it respond.
+    await _bluetoothCharacteristicWrite.write(
+      QCBandSDK.getBloodOxygen(),
     );
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
@@ -981,13 +997,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
+                  // TODO: // Get Blood Oxygen
 
-                  // sleepDetailData();
-                  // Parse Response
+                  getBloodOxygen();
+                  // Steps to Complete
+                  // 1. BCD Conversion Helper [Done] Implemented on the resolve_util.dart
+                  // 2. Language Mapping [Done] Implemented on the resolve_util.dart
+                  // 3. Constructing the Payload [Done] Implemented in qc_band_sdk_for_flutter
+                  // 4. Equivalent Write Operation in flutter_blue_plus
                 },
                 child: Text('Get BloodOxygen History'),
               ),
@@ -1015,7 +1032,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // TODO: // Set Device Time
                   // Steps to Complete
                   // 1. BCD Conversion Helper [Done] Implemented on the resolve_util.dart
                   // 2. Language Mapping [Done] Implemented on the resolve_util.dart

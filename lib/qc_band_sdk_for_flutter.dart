@@ -706,6 +706,16 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  static Uint8List getBloodOxygen() {
+    final List<int> value = _generateInitValue();
+
+    value[0] = QcBandSdkConst.actionBloodOxygen;
+ 
+
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {
     final List<int> value = [
