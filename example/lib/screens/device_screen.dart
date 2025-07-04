@@ -844,7 +844,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   deviceTimeSet() async {
-  
+  // Tested it as document in the response we should know whether some functionality are supported or not. 
     await _bluetoothCharacteristicWrite.write(
       QCBandSDK.setDeviceTime(1),
     );
