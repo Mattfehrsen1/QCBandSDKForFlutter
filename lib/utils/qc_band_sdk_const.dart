@@ -36,6 +36,7 @@ class QcBandSdkConst {
   static const cmdGetRealTimeHeartRate = 30;
   static const int cmdHrv = 57;
   static const int liveHeart = 6;
+  static const int setTime = 1; 
 
   static const int ACTION_START = 1;
   static const int ACTION_PAUSE = 2;

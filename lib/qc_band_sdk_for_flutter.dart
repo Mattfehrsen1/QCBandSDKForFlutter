@@ -693,16 +693,15 @@ class QCBandSDK {
     final second = now.second; // As per Java code: calendar.get(13)
 
     final languageByte = ResolveUtil().getLanguageByte();
+    value[0] = QcBandSdkConst.setTime;
+    value[1] = ResolveUtil().decimalToBCD(year);
+    value[2] = ResolveUtil().decimalToBCD(month);
+    value[3] = ResolveUtil().decimalToBCD(day);
+    value[4] = ResolveUtil().decimalToBCD(hour);
+    value[5] = ResolveUtil().decimalToBCD(minute);
+    value[6] = ResolveUtil().decimalToBCD(second);
+    value[7] = languageByte; // mData[6] = mLanguage
 
-    value[0] = ResolveUtil().decimalToBCD(year);
-    value[1] = ResolveUtil().decimalToBCD(month);
-    value[2] = ResolveUtil().decimalToBCD(day);
-    value[3] = ResolveUtil().decimalToBCD(hour);
-    value[4] = ResolveUtil().decimalToBCD(minute);
-    value[5] = ResolveUtil().decimalToBCD(second);
-    value[6] = languageByte; // mData[6] = mLanguage
-
-    value[0] = QcBandSdkConst.cmdGetDeviceElectricityValue;
     _crcValue(value);
     return Uint8List.fromList(value);
   }
