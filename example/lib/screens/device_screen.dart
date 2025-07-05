@@ -42,6 +42,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
   late StreamSubscription<int> _mtuSubscription;
   late BluetoothCharacteristic _bluetoothCharacteristicNotification;
   late BluetoothCharacteristic _bluetoothCharacteristicWrite;
+  late BluetoothCharacteristic _secondbluetoothCharacteristicNotification;
+  // de5bf72a-d711-4e47-af26-65e3012a5dc7
+  late BluetoothCharacteristic _secondbluetoothCharacteristicWrite;
 
   Future<void> _discoverServicesAndCharacteristics(
       BluetoothDevice device) async {
@@ -120,6 +123,69 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 print('Characteristic does not support notifications');
               }
             }
+          }
+        }
+        if (service.uuid.str
+            .toString()
+            .toLowerCase()
+            .contains(QcBandSdkConst.serialPortService)) {
+          print('Found required service 2 : ${service.uuid}');
+
+          for (final characteristic in service.characteristics) {
+            print('Found required Charactertics 2 : ${characteristic.uuid}');
+            // Find write characteristic (fff6)
+            if (characteristic.uuid.str.toString().toLowerCase() ==
+                QcBandSdkConst.serialPortWrite) {
+              setState(() {
+                _secondbluetoothCharacteristicWrite = characteristic;
+                print(
+                    'Updated _secondbluetoothCharacteristicWrite  : ${characteristic.uuid}');
+              });
+            }
+
+            // Find notification characteristic (fff7)
+            if (characteristic.uuid.str.toString().toLowerCase() ==
+                QcBandSdkConst.serialPortNotify) {
+              print(
+                  'Found notification characteristic: ${characteristic.uuid.str}');
+
+              if (characteristic.properties.notify) {
+                try {
+                  // Enable notifications de5bf729-d711-4e47-af26-65e3012a5dc7
+                  await characteristic.setNotifyValue(true);
+                  setState(() {
+                    _secondbluetoothCharacteristicNotification = characteristic;
+                  });
+                  print('Notifications enabled  de5bf729-d711-4e47-af26-65e3012a5dc7 ');
+                  // FFAppState().ListenValueCharactertics = characteristic;
+                } catch (e) {
+                  // print('Error enabling notifications: $e');
+                }
+              } else {
+                print('Characteristic does not support notifications');
+              }
+            }
+            // if (characteristic.uuid.str.toString().toLowerCase() ==
+            //     QcBandSdkConst.serialPortNotify) {
+            //   print(
+            //       'Found notification characteristic: ${characteristic.uuid.str}');
+
+            //   if (characteristic.properties.notify) {
+            //     try {
+            //       // Enable notifications
+            //       await characteristic.setNotifyValue(true);
+            //       setState(() {
+            //         _bluetoothCharacteristicNotification = characteristic;
+            //       });
+            //       print('Notifications enabled');
+            //       // FFAppState().ListenValueCharactertics = characteristic;
+            //     } catch (e) {
+            //       print('Error enabling notifications: $e');
+            //     }
+            //   } else {
+            //     print('Characteristic does not support notifications');
+            //   }
+            // }
           }
         }
       }

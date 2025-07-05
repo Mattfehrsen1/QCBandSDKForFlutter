@@ -12,9 +12,9 @@ class QcBandSdkConst {
   static final charHwRevision = Guid('00002A27-0000-1000-8000-00805F9B34FB');
   static final charSoftwareRevision =
       Guid('00002A28-0000-1000-8000-00805F9B34FB');
-  static final serialPortService = Guid('de5bf728-d711-4e47-af26-65e3012a5dc7');
-  static final serialPortNotify = Guid('de5bf729-d711-4e47-af26-65e3012a5dc7');
-  static final serialPortWrite = Guid('de5bf72a-d711-4e47-af26-65e3012a5dc7');
+  static final serialPortService = 'de5bf728-d711-4e47-af26-65e3012a5dc7';
+  static final serialPortNotify = 'de5bf729-d711-4e47-af26-65e3012a5dc7';
+  static final serialPortWrite = 'de5bf72a-d711-4e47-af26-65e3012a5dc7';
 
   // BLE Constants
   static const int cmdDataLength = 16;
