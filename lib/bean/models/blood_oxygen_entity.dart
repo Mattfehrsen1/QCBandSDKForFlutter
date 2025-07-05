@@ -24,7 +24,6 @@ class BloodOxygenEntity {
   }
 }
 
-
 // Helper function to convert 2 bytes to a short (int in Dart), little-endian
 int bytesToShortOxygen(List<int> bytes) {
   return (bytes[1] << 8) | bytes[0];
@@ -36,7 +35,8 @@ List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
   // 1. Validate Header and Command ID
   // The first byte (0) should be 188 (0xBC)
   if (receivedData.isEmpty || receivedData[0] != 188) {
-    print("Error: Invalid header byte. Expected 188 (0xBC). Got ${receivedData[0]}.");
+    print(
+        "Error: Invalid header byte. Expected 188 (0xBC). Got ${receivedData[0]}.");
     return [];
   }
   // The second byte (1) should be 42 (ACTION_Blood_Oxygen)
@@ -47,7 +47,8 @@ List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
 
   // 2. Extract Data Length (Bytes 2 and 3)
   // This is the total length of the data payload that follows (from index 6 onwards).
-  int totalDataPayloadLength = bytesToShortOxygen(receivedData.sublist(2, 4)); // In your example: [147, 0] -> 147
+  int totalDataPayloadLength = bytesToShortOxygen(
+      receivedData.sublist(2, 4)); // In your example: [147, 0] -> 147
 
   // 3. Extract CRC (Bytes 4 and 5)
   // int receivedCrc = bytesToShortOxygen(receivedData.sublist(4, 6)); // In your example: [152, 188] -> 48312
@@ -56,12 +57,14 @@ List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
   // 4. Isolate the Raw Data Payload
   // The actual blood oxygen data starts from index 6.
   // The length of this payload is `totalDataPayloadLength`.
-  Uint8List rawDataPayload = receivedData.sublist(6, 6 + totalDataPayloadLength);
+  Uint8List rawDataPayload =
+      receivedData.sublist(6, 6 + totalDataPayloadLength);
 
   // 5. Calculate Number of BloodOxygenEntity Records
   // Each BloodOxygenEntity record is 49 bytes long.
   if (rawDataPayload.length % 49 != 0) {
-    print("Warning: Raw data payload length (${rawDataPayload.length}) is not a multiple of 49. Data might be incomplete or malformed.");
+    print(
+        "Warning: Raw data payload length (${rawDataPayload.length}) is not a multiple of 49. Data might be incomplete or malformed.");
     return [];
   }
   int numberOfRecords = rawDataPayload.length ~/ 49;
@@ -78,20 +81,23 @@ List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
     List<int> minArray = rawDataPayload.sublist(offset, offset + 24).toList();
 
     // Extract maxArray (bytes 24 to 47 within the 49-byte chunk)
-    List<int> maxArray = rawDataPayload.sublist(offset + 24, offset + 48).toList();
+    List<int> maxArray =
+        rawDataPayload.sublist(offset + 24, offset + 48).toList();
 
     // Extract date offset (byte 48 within the 49-byte chunk)
     int dateOffsetDays = rawDataPayload[offset + 48];
 
     // Derive dateStr and unixTime
     // The dateOffsetDays tells us how many days before 'today' the data was recorded.
-    DateTime recordDate = todayMidnight.subtract(Duration(days: dateOffsetDays));
+    DateTime recordDate =
+        todayMidnight.subtract(Duration(days: dateOffsetDays));
 
     String dateStr = "${recordDate.year.toString()}-"
-                     "${recordDate.month.toString().padLeft(2, '0')}-"
-                     "${recordDate.day.toString().padLeft(2, '0')}";
+        "${recordDate.month.toString().padLeft(2, '0')}-"
+        "${recordDate.day.toString().padLeft(2, '0')}";
 
-    int unixTime = recordDate.millisecondsSinceEpoch ~/ 1000; // Unix timestamp in seconds
+    int unixTime =
+        recordDate.millisecondsSinceEpoch ~/ 1000; // Unix timestamp in seconds
 
     bloodOxygenRecords.add(BloodOxygenEntity(
       dateStr: dateStr,
@@ -107,11 +113,17 @@ List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
 // Example Usage:
 /*
 void main() {
-  Uint8List receivedBytes = Uint8List.fromList([
-    188, 42, 147, 0, 152, 188, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 98, 96, 96, 99, 99, 98, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 96, 96, 97, 97, 98, 98, 99, 99, 98, 98, 96, 96, 98, 98, 0, 0, 99, 99, 99, 99, 96, 96, 98, 98, 96, 96, 0, 0, 0, 0, 97, 97, 98, 98, 98, 98, 97, 97, 99, 99, 98, 98, 0, 0, 96, 96, 97, 97, 0, 98, 98, 99, 99, 97, 97, 99, 99, 99, 99, 98, 98, 99, 99, 99, 99, 99, 99, 99, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+ Uint8List receivedBytes = Uint8List.fromList([
+    188, 42, 147, 0, 152, 188, 2,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 98, 96, 96, 99, 99, 98, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    96, 96, 97, 97, 98, 98, 99, 99, 98, 98, 96, 96, 98, 98, 0, 0, 99, 99, 99, 99, 96, 96, 98, 98, 96, 96, 0, 0, 0, 0, 97, 97, 98, 98, 98, 98, 97, 97, 99, 99, 98, 98, 0, 0, 96, 96, 97, 97, 0, 98, 98, 99, 99, 97, 97, 99, 99, 99, 99, 98, 98, 99, 99, 99, 99, 99, 99, 99, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
   ]);
-
   List<BloodOxygenEntity> parsedData = parseBloodOxygenData(receivedBytes);
   parsedData.forEach((entity) => print(entity));
 }
 */
+//  Total Received bytes are 153
+// According to Documentation Each individual blood oxygen record is 49 bytes long and 3 day data being stored. [49 * 3 = 147 ]
+// Confusion If 1 hour gap data being stored then why it is 49 entries not 24 for a day 
+// Answer Because it is storing the data of 1 hour and each hour has 2 points . [24 *2 = 48] and Asummation the 1 point will be the seperator
+// 153 - 147 = 6 
