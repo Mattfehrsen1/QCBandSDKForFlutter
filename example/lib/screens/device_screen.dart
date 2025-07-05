@@ -952,7 +952,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
         List<BloodOxygenEntity> parsedData =
             parseBloodOxygenData(Uint8List.fromList(value));
         parsedData.forEach((entity) {
-          print(" Date ${entity.dateStr} \n ${entity.maxArray} \n ${entity.maxArray}");
+        print(entity.toString());
         });
         // print(recievedHRVData);
         // log('Received Sleep: $value');

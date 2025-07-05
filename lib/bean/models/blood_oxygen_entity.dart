@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+import 'package:intl/intl.dart'; // For date formatting
 
+// 1. Define the BloodOxygenEntity Class in Dart (remains the same)
 class BloodOxygenEntity {
   String dateStr; // Data date (e.g., "2025-07-05")
   List<int> minArray; // Data minimum value array (24 values, one per hour)
@@ -16,93 +18,78 @@ class BloodOxygenEntity {
   @override
   String toString() {
     return 'BloodOxygenEntity(\n'
-        '  dateStr: $dateStr,\n'
-        '  unixTime: $unixTime (${DateTime.fromMillisecondsSinceEpoch(unixTime * 1000)}),\n'
-        '  minArray: ${minArray.map((e) => e.toString().padLeft(2, '0')).join(', ')}\n'
-        '  maxArray: ${maxArray.map((e) => e.toString().padLeft(2, '0')).join(', ')}\n'
+        '  Date: $dateStr (Unix: $unixTime (${DateTime.fromMillisecondsSinceEpoch(unixTime * 1000)})),\n'
+        '  Min Array (24 hours): ${minArray.map((e) => e.toString().padLeft(2, '0')).join(', ')}\n'
+        '  Max Array (24 hours): ${maxArray.map((e) => e.toString().padLeft(2, '0')).join(', ')}\n'
         ')';
   }
 }
 
 // Helper function to convert 2 bytes to a short (int in Dart), little-endian
-int bytesToShortOxygen(List<int> bytes) {
+int bytesToShort(List<int> bytes) {
   return (bytes[1] << 8) | bytes[0];
 }
 
+// 2. Updated Parsing Logic with Interleaved Min/Max
 List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
   List<BloodOxygenEntity> bloodOxygenRecords = [];
 
-  // 1. Validate Header and Command ID
-  // The first byte (0) should be 188 (0xBC)
-  if (receivedData.isEmpty || receivedData[0] != 188) {
-    print(
-        "Error: Invalid header byte. Expected 188 (0xBC). Got ${receivedData[0]}.");
-    return [];
-  }
-  // The second byte (1) should be 42 (ACTION_Blood_Oxygen)
-  if (receivedData[1] != 42) {
-    print("Error: Invalid Command ID. Expected 42. Got ${receivedData[1]}.");
+  // --- Header Validation (Optional but good practice) ---
+  if (receivedData.isEmpty || receivedData[0] != 188 || receivedData[1] != 42) {
+    print("Error: Invalid header or Command ID. Not a blood oxygen packet.");
     return [];
   }
 
-  // 2. Extract Data Length (Bytes 2 and 3)
-  // This is the total length of the data payload that follows (from index 6 onwards).
-  int totalDataPayloadLength = bytesToShortOxygen(
-      receivedData.sublist(2, 4)); // In your example: [147, 0] -> 147
+  // Extract total data payload length from bytes 2 and 3
+  int totalDataPayloadLength = bytesToShort(receivedData.sublist(2, 4));
 
-  // 3. Extract CRC (Bytes 4 and 5)
-  // int receivedCrc = bytesToShortOxygen(receivedData.sublist(4, 6)); // In your example: [152, 188] -> 48312
-  // You might want to re-calculate CRC of the data payload and compare it with receivedCrc for data integrity.
+  // Isolate the raw data payload (after the 6-byte header)
+  // Ensure we don't go out of bounds if totalDataPayloadLength is larger than actual receivedData.length - 6
+  Uint8List rawDataPayload = receivedData.sublist(6, (6 + totalDataPayloadLength).clamp(0, receivedData.length));
 
-  // 4. Isolate the Raw Data Payload
-  // The actual blood oxygen data starts from index 6.
-  // The length of this payload is `totalDataPayloadLength`.
-  Uint8List rawDataPayload =
-      receivedData.sublist(6, 6 + totalDataPayloadLength);
-
-  // 5. Calculate Number of BloodOxygenEntity Records
-  // Each BloodOxygenEntity record is 49 bytes long.
+  // Each BloodOxygenEntity record is 49 bytes long
   if (rawDataPayload.length % 49 != 0) {
-    print(
-        "Warning: Raw data payload length (${rawDataPayload.length}) is not a multiple of 49. Data might be incomplete or malformed.");
+    print("Warning: Raw data payload length (${rawDataPayload.length}) is not a multiple of 49. Data might be incomplete or malformed.");
     return [];
   }
-  int numberOfRecords = rawDataPayload.length ~/ 49;
 
-  // 6. Iterate and Parse Each Record (49 bytes per record)
+  int numberOfRecords = rawDataPayload.length ~/ 49;
   DateTime now = DateTime.now();
   // Get today's date at midnight (00:00:00) for calculating timestamps
   DateTime todayMidnight = DateTime(now.year, now.month, now.day);
 
   for (int i = 0; i < numberOfRecords; i++) {
-    int offset = i * 49; // Starting byte for the current record
+    int recordStartOffset = i * 49; // Starting byte for the current 49-byte record chunk
 
-    // Extract minArray (bytes 0 to 23 within the 49-byte chunk)
-    List<int> minArray = rawDataPayload.sublist(offset, offset + 24).toList();
+    // --- Parsing the 49-byte record chunk ---
 
-    // Extract maxArray (bytes 24 to 47 within the 49-byte chunk)
-    List<int> maxArray =
-        rawDataPayload.sublist(offset + 24, offset + 48).toList();
+    // Byte 0 of the 49-byte chunk: dateOffsetDays
+    // This is at `rawDataPayload[recordStartOffset]`
+    int dateOffsetDays = rawDataPayload[recordStartOffset];
 
-    // Extract date offset (byte 48 within the 49-byte chunk)
-    int dateOffsetDays = rawDataPayload[offset + 48];
+    // Bytes 1-48 of the 49-byte chunk: Interleaved Min/Max values (48 bytes total)
+    List<int> currentMinArray = [];
+    List<int> currentMaxArray = [];
 
-    // Derive dateStr and unixTime
-    // The dateOffsetDays tells us how many days before 'today' the data was recorded.
-    DateTime recordDate =
-        todayMidnight.subtract(Duration(days: dateOffsetDays));
+    // Loop 24 times for 24 hours
+    for (int j = 0; j < 24; j++) {
+      // Calculate index within the rawDataPayload for the current hour's min/max pair
+      int minByteIndex = recordStartOffset + 1 + (j * 2);
+      int maxByteIndex = recordStartOffset + 1 + (j * 2) + 1;
 
-    String dateStr = "${recordDate.year.toString()}-"
-        "${recordDate.month.toString().padLeft(2, '0')}-"
-        "${recordDate.day.toString().padLeft(2, '0')}";
+      currentMinArray.add(rawDataPayload[minByteIndex]);
+      currentMaxArray.add(rawDataPayload[maxByteIndex]);
+    }
 
-    int unixTime =
-        recordDate.millisecondsSinceEpoch ~/ 1000; // Unix timestamp in seconds
+    // --- Derive Date and Unix Timestamp ---
+    DateTime recordDate = todayMidnight.subtract(Duration(days: dateOffsetDays));
+    String dateStr = DateFormat('yyyy-MM-dd').format(recordDate); // Format as YYYY-MM-DD
+    int unixTime = recordDate.millisecondsSinceEpoch ~/ 1000; // Unix timestamp in seconds
 
     bloodOxygenRecords.add(BloodOxygenEntity(
       dateStr: dateStr,
-      minArray: minArray,
-      maxArray: maxArray,
+      minArray: currentMinArray,
+      maxArray: currentMaxArray,
       unixTime: unixTime,
     ));
   }
@@ -111,12 +98,40 @@ List<BloodOxygenEntity> parseBloodOxygenData(Uint8List receivedData) {
 }
 
 // Example Usage:
+// void main() {
+//   Uint8List receivedBytes = Uint8List.fromList([
+//     188, 42, 147, 0, 152, 188, // Header (6 bytes)
+//     // --- Record 1 (49 bytes) - Example from earlier (mostly zeros, dateOffsetDays = 2) ---
+//     2, // dateOffsetDays = 2 (today - 2 days)
+//     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // Interleaved min/max (24 pairs of 0s)
+//     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // (continuation of 24 pairs of 0s)
+//     // --- Record 2 (49 bytes) - Data where [96, 96] is min-max for 00:00 (dateOffsetDays = 1) ---
+//     1, // dateOffsetDays = 1 (today - 1 day)
+//     96, 96, // 00:00 - 01:00 min:96, max:96
+//     97, 97, // 01:00 - 02:00 min:97, max:97
+//     98, 98, // 02:00 - 03:00 min:98, max:98
+//     99, 99, // 03:00 - 04:00 min:99, max:99
+//     98, 98, // 04:00 - 05:00 min:98, max:98
+//     96, 96, 98, 98, 0, 0, 99, 99, 99, 99, 96, 96, 98, 98, 96, 96, 0, 0, 0, 0, 97, 97, 98, 98, 98, 98, 97, 97, 99, 99, 98, 98, 0, 0, 96, 96, 97, 97, // Remaining 22 pairs
+//     // --- Record 3 (49 bytes) - Data where [98, 98] is min-max for 00:00 (dateOffsetDays = 0) ---
+//     0, // dateOffsetDays = 0 (today)
+//     98, 98, // 00:00 - 01:00 min:98, max:98
+//     99, 99, // 01:00 - 02:00 min:99, max:99
+//     97, 97, 99, 99, 99, 99, 98, 98, 99, 99, 99, 99, 99, 99, 99, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // Remaining 22 pairs
+//   ]);
+
+//   List<BloodOxygenEntity> parsedData = parseBloodOxygenData(receivedBytes);
+//   print("\n--- Parsed Blood Oxygen Records ---");
+//   parsedData.forEach((entity) => print(entity));
+// }
+// Example Usage:
 /*
 void main() {
  Uint8List receivedBytes = Uint8List.fromList([
-    188, 42, 147, 0, 152, 188, 2,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 98, 96, 96, 99, 99, 98, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    96, 96, 97, 97, 98, 98, 99, 99, 98, 98, 96, 96, 98, 98, 0, 0, 99, 99, 99, 99, 96, 96, 98, 98, 96, 96, 0, 0, 0, 0, 97, 97, 98, 98, 98, 98, 97, 97, 99, 99, 98, 98, 0, 0, 96, 96, 97, 97, 0, 98, 98, 99, 99, 97, 97, 99, 99, 99, 99, 98, 98, 99, 99, 99, 99, 99, 99, 99, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    188, 42, 147, 0, 152, 188, 
+    2,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 98, 96, 96, 99, 99, 98, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    1,96, 96, 97, 97, 98, 98, 99, 99, 98, 98, 96, 96, 98, 98, 0, 0, 99, 99, 99, 99, 96, 96, 98, 98, 96, 96, 0, 0, 0, 0, 97, 97, 98, 98, 98, 98, 97, 97, 99, 99, 98, 98, 0, 0, 96, 96, 97, 97, 
+    0, 98, 98, 99, 99, 97, 97, 99, 99, 99, 99, 98, 98, 99, 99, 99, 99, 99, 99, 99, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
   ]);
   List<BloodOxygenEntity> parsedData = parseBloodOxygenData(receivedBytes);
   parsedData.forEach((entity) => print(entity));
