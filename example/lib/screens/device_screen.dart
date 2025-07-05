@@ -156,7 +156,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   setState(() {
                     _secondbluetoothCharacteristicNotification = characteristic;
                   });
-                  print('Notifications enabled  de5bf729-d711-4e47-af26-65e3012a5dc7 ');
+                  print(
+                      'Notifications enabled  de5bf729-d711-4e47-af26-65e3012a5dc7 ');
                   // FFAppState().ListenValueCharactertics = characteristic;
                 } catch (e) {
                   // print('Error enabling notifications: $e');
@@ -925,14 +926,27 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
-  getBloodOxygen() async {
-    // Testing to send raw command on ACTION_Blood_Oxygen = 42 and see how it respond.
-    await _bluetoothCharacteristicWrite.write(
+// --- START Helper Functions ---
+
+// Function to construct the full BLE packet
+
+  getBloodOxygenDevice() async {
+    // Step 1. Construct the Data Payload [ Done ] [Moved to qc_band_sdk_for_flutter]
+    // a . The data payload for this command is a single byte with value -1.
+    // b. / Construct the full, correctly formatted command packet
+    // This packet will be: [0xBC, 0x2A, 0x01, 0x00, <CRC_LSB>, <CRC_MSB>, 0xFF]
+
+    // Send the constructed packet to the write characteristic
+    await _secondbluetoothCharacteristicWrite.write(
       QCBandSDK.getBloodOxygen(),
     );
-    _bluetoothCharacteristicNotification.value.listen((value) {
+    print(
+        'Sent Blood Oxygen request: ${ QCBandSDK.getBloodOxygen().map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
+
+    _secondbluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
-      print('Received notification: $value');
+      print(
+          'Received notification: ${QcBandSdkConst.serialPortNotify} \n $value');
       if (value.isNotEmpty) {
         // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
         // print(recievedHRVData);
@@ -1065,7 +1079,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 onPressed: () {
                   // TODO: // Get Blood Oxygen
 
-                  getBloodOxygen();
+                  getBloodOxygenDevice();
                   // Steps to Complete
                   // 1. BCD Conversion Helper [Done] Implemented on the resolve_util.dart
                   // 2. Language Mapping [Done] Implemented on the resolve_util.dart

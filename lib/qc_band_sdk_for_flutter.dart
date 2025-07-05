@@ -707,13 +707,14 @@ class QCBandSDK {
   }
 
   static Uint8List getBloodOxygen() {
-    final List<int> value = _generateInitValue();
+    // Testing to send raw command on ACTION_Blood_Oxygen = 42 and see how it respond.
+    // The command ID for blood oxygen is 42.
+    // The data payload for this command is a single byte with value -1.
+    Uint8List requestDataPayload =
+        Uint8List.fromList([-1]); // Represents the byte 0xFF
+    Uint8List commandPacket = ResolveUtil().addHeader(42, requestDataPayload);
 
-    value[0] = QcBandSdkConst.actionBloodOxygen;
- 
-
-    _crcValue(value);
-    return Uint8List.fromList(value);
+    return Uint8List.fromList(commandPacket);
   }
 
   static Uint8List getDetailStepData(

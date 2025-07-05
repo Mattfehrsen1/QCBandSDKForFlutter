@@ -858,7 +858,10 @@ class ResolveUtil {
 
 //   ///htv测试数据
   static Map getHrvTestData(List<int> value) {
-    Map maps = {DeviceKey.DataType: QcBandSdkConst.cmdHrv, DeviceKey.End: false};
+    Map maps = {
+      DeviceKey.DataType: QcBandSdkConst.cmdHrv,
+      DeviceKey.End: false
+    };
     List<Map> list = [];
     maps.addAll({DeviceKey.Data: list});
     int count = 15;
@@ -1813,58 +1816,123 @@ class ResolveUtil {
 //     return maps;
 //   }
 
-int decimalToBCD(int decimal) {
-  if (decimal < 0 || decimal > 99) {
-    throw ArgumentError("Decimal value must be between 0 and 99 for BCD conversion.");
+  int decimalToBCD(int decimal) {
+    if (decimal < 0 || decimal > 99) {
+      throw ArgumentError(
+          "Decimal value must be between 0 and 99 for BCD conversion.");
+    }
+    return ((decimal ~/ 10) << 4) | (decimal % 10);
   }
-  return ((decimal ~/ 10) << 4) | (decimal % 10);
-}
+
 // Map similar to the Java mLocaleMap
-final Map<String, int> _localeMap = {
-  "zh_CN": 0,
-  "en": 1,
-  "zh_HK": 2,
-  "zh_TW": 2,
-  "el": 3,
-  "fr": 4,
-  "de": 5,
-  "it": 6,
-  "es": 7,
-  "nl": 8,
-  "pt": 9,
-  "ru": 10,
-  "tr": 11,
-  "ja": 12,
-  "ko": 13,
-  "pl": 14,
-  "ro": 15,
-  "ar": 16,
-  "th": 17,
-  "vi": 18,
-  "in": 19,
-  // Add other locales as needed if your device supports them
-};
+  final Map<String, int> _localeMap = {
+    "zh_CN": 0,
+    "en": 1,
+    "zh_HK": 2,
+    "zh_TW": 2,
+    "el": 3,
+    "fr": 4,
+    "de": 5,
+    "it": 6,
+    "es": 7,
+    "nl": 8,
+    "pt": 9,
+    "ru": 10,
+    "tr": 11,
+    "ja": 12,
+    "ko": 13,
+    "pl": 14,
+    "ro": 15,
+    "ar": 16,
+    "th": 17,
+    "vi": 18,
+    "in": 19,
+    // Add other locales as needed if your device supports them
+  };
 
 // Function to get the language byte
-int getLanguageByte() {
-  // Use `Platform.localeName` or `Intl.getCurrentLocale()` for current locale
-  // For simplicity, using `Intl.getCurrentLocale()` from `package:intl`
-  // You might need to import 'dart:io' for `Platform.localeName` in a real app.
-  // For browser, `dart:html` might be needed, or consider `package:device_info_plus`.
-  String currentLocale = Intl.getCurrentLocale(); // e.g., "en_US", "zh_CN"
+  int getLanguageByte() {
+    // Use `Platform.localeName` or `Intl.getCurrentLocale()` for current locale
+    // For simplicity, using `Intl.getCurrentLocale()` from `package:intl`
+    // You might need to import 'dart:io' for `Platform.localeName` in a real app.
+    // For browser, `dart:html` might be needed, or consider `package:device_info_plus`.
+    String currentLocale = Intl.getCurrentLocale(); // e.g., "en_US", "zh_CN"
 
-  String language = currentLocale.split('_')[0]; // "en", "zh"
-  String country = currentLocale.length > 2 ? currentLocale.split('_')[1] : '';
+    String language = currentLocale.split('_')[0]; // "en", "zh"
+    String country =
+        currentLocale.length > 2 ? currentLocale.split('_')[1] : '';
 
-  String key = language;
-  if (language.startsWith("zh") && country.isNotEmpty) {
-    key = "${language}_$country";
+    String key = language;
+    if (language.startsWith("zh") && country.isNotEmpty) {
+      key = "${language}_$country";
+    }
+
+    // Debugging log similar to Java code
+    print("SetTimeReq -> mLanguage: $key, value: ${_localeMap[key]}");
+
+    // Default to English (1) if locale not found, similar to Java code
+    return _localeMap[key] ?? 1;
   }
 
-  // Debugging log similar to Java code
-  print("SetTimeReq -> mLanguage: $key, value: ${_localeMap[key]}");
+// Function to construct the full BLE packet
+  Uint8List addHeader(int cmdId, Uint8List? data) {
+    int dataLength = data?.length ?? 0;
+    Uint8List pocket =
+        Uint8List(dataLength + 6); // 6 bytes for header + data length + CRC
 
-  // Default to English (1) if locale not found, similar to Java code
-  return _localeMap[key] ?? 1;
-}
+    pocket[0] = (-68).toUnsigned(8); // Fixed header byte (0xBC)
+    pocket[1] = cmdId.toUnsigned(8); // Command ID
+
+    if (data != null && dataLength > 0) {
+      // Bytes 2 & 3: Data Length (little-endian)
+      Uint8List dataLenBytes = shortToBytes(dataLength);
+      pocket.setRange(2, 4, dataLenBytes);
+
+      // Bytes 4 & 5: CRC16 of the DATA payload (little-endian)
+      int crc = calcCrc16(data);
+      Uint8List crcBytes = shortToBytes(crc);
+      pocket.setRange(4, 6, crcBytes);
+
+      // Bytes 6 onwards: The actual Data Payload
+      pocket.setRange(6, 6 + dataLength, data);
+    } else {
+      // If no data payload, CRC fields are set to -1 (0xFF)
+      pocket[4] = (-1).toUnsigned(8);
+      pocket[5] = (-1).toUnsigned(8);
+    }
+    return pocket;
+  }
+
+  // Utility to convert a short (16-bit integer) to a 2-byte Uint8List (little-endian)
+  Uint8List shortToBytes(int s) {
+    // Dart's setInt16 handles signed integers correctly.
+    // Ensure Endian.little matches the device's expectation.
+    return Uint8List(2)..buffer.asByteData().setInt16(0, s, Endian.little);
+  }
+
+  int calcCrc16(Uint8List bufData) {
+    int crc = 0xFFFF; // Initial CRC value
+    const int polynomial = 0xA001; // POLYNOMIAL in Java is 40961 (0xA001 hex)
+
+    if (bufData.isEmpty) {
+      return crc;
+    }
+
+    for (int i = 0; i < bufData.length; i++) {
+      // CRC ^= bufData[i] & 0xFF; (in Java, byte is signed, & 0xFF converts to unsigned int)
+      // In Dart, byte (int) is already effectively unsigned when doing bitwise ops
+      crc ^= bufData[i];
+
+      for (int j = 0; j < 8; j++) {
+        if ((crc & 0x0001) != 0) {
+          // Check if LSB is 1
+          crc >>= 1; // Shift right
+          crc ^= polynomial; // XOR with polynomial
+        } else {
+          crc >>= 1; // Shift right
+        }
+      }
+    }
+    return crc & 0xFFFF; // Ensure result is a 16-bit unsigned integer
+  }
 }
