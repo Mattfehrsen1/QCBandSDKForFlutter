@@ -15,6 +15,7 @@ import '../widgets/descriptor_tile.dart';
 import '../utils/snackbar.dart';
 import '../utils/extra.dart';
 import 'package:qc_band_sdk_for_flutter/qc_band_sdk_for_flutter.dart';
+import 'package:qc_band_sdk_for_flutter/bean/models/blood_oxygen_entity.dart';
 
 class DeviceScreen extends StatefulWidget {
   final BluetoothDevice device;
@@ -941,14 +942,18 @@ class _DeviceScreenState extends State<DeviceScreen> {
       QCBandSDK.getBloodOxygen(),
     );
     print(
-        'Sent Blood Oxygen request: ${ QCBandSDK.getBloodOxygen().map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        'Sent Blood Oxygen request: ${QCBandSDK.getBloodOxygen().map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
 
     _secondbluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print(
-          'Received notification: ${QcBandSdkConst.serialPortNotify} \n $value');
+          'Received notification: ${QcBandSdkConst.serialPortNotify} \n ${value.length}');
       if (value.isNotEmpty) {
-        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        List<BloodOxygenEntity> parsedData =
+            parseBloodOxygenData(Uint8List.fromList(value));
+        parsedData.forEach((entity) {
+          print(" Date ${entity.dateStr} \n ${entity.maxArray} \n ${entity.maxArray}");
+        });
         // print(recievedHRVData);
         // log('Received Sleep: $value');
       }
