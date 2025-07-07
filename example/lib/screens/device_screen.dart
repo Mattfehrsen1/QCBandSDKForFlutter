@@ -952,10 +952,52 @@ class _DeviceScreenState extends State<DeviceScreen> {
         List<BloodOxygenEntity> parsedData =
             parseBloodOxygenData(Uint8List.fromList(value));
         parsedData.forEach((entity) {
-        print(entity.toString());
+          print(entity.toString());
         });
         // print(recievedHRVData);
-        // log('Received Sleep: $value');
+        // log('Received Sleep: $value  ');
+      }
+    });
+  }
+
+  getBloodPressureDevice() async {
+    // await _bluetoothCharacteristicWrite.write(
+    //   QCBandSDK.getBloodPressure(0),
+    // );
+
+    int offset = 0;
+    if (_bluetoothCharacteristicWrite == null) {
+      print("Write characteristic not initialized.");
+      return;
+    }
+
+    // Ensure offset is within the valid range (0-6)
+    if (offset < 0 || offset > 6) {
+      print("Invalid offset. Must be between 0 and 6.");
+      return;
+    }
+
+    final command = QCBandSDK.getBloodPressure(offset);
+    print(
+        "Sending command: ${command.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}");
+
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+        withoutResponse:
+            false, // Set to true if your device doesn't send a write response
+      );
+      print("Pressure request sent successfully for offset: $offset");
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
       }
     });
   }
@@ -1095,12 +1137,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
-                  // sleepDetailData();
-                  // Parse Response
+                  // Steps to Complete
+                  // 1. Same as liveHeartData Function
+                  getBloodPressureDevice();
                 },
                 child: Text('Get BloodPressure History'),
               ),

@@ -1935,4 +1935,17 @@ class ResolveUtil {
     }
     return crc & 0xFFFF; // Ensure result is a 16-bit unsigned integer
   }
+
+ 
+
+  List<int> calculateCrc(List<int> data) {
+    int crc = 0;
+    // Sum all bytes except the last one (where CRC will be placed)
+    for (int i = 0; i < data.length - 1; i++) {
+      crc += data[i];
+    }
+    // Mask to 8 bits and set the last byte
+    data[data.length - 1] = (crc & 0xFF);
+    return data;
+  }
 }

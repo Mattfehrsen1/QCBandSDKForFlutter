@@ -717,6 +717,22 @@ class QCBandSDK {
     return Uint8List.fromList(commandPacket);
   }
 
+  static Uint8List getBloodPressure(int offset) {
+    List<int> bytes = List.filled(16, 0);
+
+    // Set the command key
+    bytes[0] = QcBandSdkConst.getBloodPressure;
+
+    // Set the subData (offset in this case)
+    bytes[1] = offset;
+    List<int> listofInt = ResolveUtil().calculateCrc(bytes);
+    // Convert List<int> to Uint8List
+    Uint8List uint8List = Uint8List.fromList(listofInt);
+    // The rest of the bytes (2 to 14) are 0 by default from List.filled
+    return uint8List;
+    // Calculate and add CRC to the last byte
+  }
+
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {
     final List<int> value = [
