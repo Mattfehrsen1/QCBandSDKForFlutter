@@ -897,16 +897,16 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   sleepDetailData() async {
     // Today
-    await _bluetoothCharacteristicWrite.write(
+    await _secondbluetoothCharacteristicWrite.write(
       QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
     );
-    _bluetoothCharacteristicNotification.value.listen((value) {
+    _secondbluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
       if (value.isNotEmpty) {
         // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
         // print(recievedHRVData);
-        // log('Received Sleep: $value');
+        log('Received Sleep: $value');
       }
     });
   }
@@ -1039,6 +1039,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       }
     });
   }
+  
 
   @override
   Widget build(BuildContext context) {
