@@ -717,7 +717,7 @@ class QCBandSDK {
     return Uint8List.fromList(commandPacket);
   }
 
-  static Uint8List getBloodPressure(int offset) {
+  static Uint8List getBloodPressureWrong(int offset) {
     List<int> bytes = List.filled(16, 0);
 
     // Set the command key
@@ -731,6 +731,13 @@ class QCBandSDK {
     // The rest of the bytes (2 to 14) are 0 by default from List.filled
     return uint8List;
     // Calculate and add CRC to the last byte
+  }
+
+  static Uint8List getBloodPressure(int offset) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.getBloodPressure;
+    _crcValue(value);
+    return Uint8List.fromList(value);
   }
 
   static Uint8List getDetailStepData(
