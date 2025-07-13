@@ -896,49 +896,52 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   sleepDetailData() async {
+    try {
+      // Ensure services are discovered if not already done
 
+      // *** Ensure notifications are already set up and listening as you mentioned ***
+      // If not, you would enable them here:
+      // if (!readCharacteristic.isNotifying) {
+      //   await readCharacteristic.setNotifyValue(true);
+      //   print("Enabled notifications on read characteristic.");
+      //   readCharacteristic.value.listen((value) {
+      //     print("Received data: $value");
+      //     // Call your parsing function here
+      //     // parseReceivedSleepData(value);
+      //   });
+      // }
 
+      // 1. Build the payload using the NEW ReadSleepDetailsReq structure
+      final int cmdGetSleep = 39; // Constants.CMD_GET_SLEEP (0x44)
+      final List<int> payload = buildReadSleepDetailsReqPayload(1, 0, 95);
 
-  try {
-    // Ensure services are discovered if not already done
-  
+      // 2. Build the full 16-byte command packet
+      final List<int> fullCommandPacket =
+          buildBleCommandPacket(cmdGetSleep, payload);
 
+      print(
+          "Attempting to send command: $fullCommandPacket (Length: ${fullCommandPacket.length})");
 
-
-
-    // *** Ensure notifications are already set up and listening as you mentioned ***
-    // If not, you would enable them here:
-    // if (!readCharacteristic.isNotifying) {
-    //   await readCharacteristic.setNotifyValue(true);
-    //   print("Enabled notifications on read characteristic.");
-    //   readCharacteristic.value.listen((value) {
-    //     print("Received data: $value");
-    //     // Call your parsing function here
-    //     // parseReceivedSleepData(value);
-    //   });
-    // }
-
-
-    // 1. Build the payload using the NEW ReadSleepDetailsReq structure
-    final int cmdGetSleep = 68; // Constants.CMD_GET_SLEEP (0x44)
-    final List<int> payload = buildReadSleepDetailsReqPayload(1, 0, 95);
-
-    // 2. Build the full 16-byte command packet
-    final List<int> fullCommandPacket = buildBleCommandPacket(cmdGetSleep, payload);
-
-    print("Attempting to send command: $fullCommandPacket (Length: ${fullCommandPacket.length})");
-
-    // 3. Write the packet to the characteristic
-    // Use `withoutResponse: false` if you expect an acknowledgment.
-    // Use `withoutResponse: true` for faster writes if no response is needed at the GATT layer.
-    // The Java code implies a response is expected (ICommandResponse), so 'false' is safer.
-    await _bluetoothCharacteristicWrite.write(fullCommandPacket, withoutResponse: false);
-    print("Command for sleep data requested successfully.");
-
-  } catch (e) {
-    print("Failed to request sleep data: $e");
-    // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-  }
+      // 3. Write the packet to the characteristic
+      // Use `withoutResponse: false` if you expect an acknowledgment.
+      // Use `withoutResponse: true` for faster writes if no response is needed at the GATT layer.
+      // The Java code implies a response is expected (ICommandResponse), so 'false' is safer.
+      await _secondbluetoothCharacteristicWrite
+          .write([188, 39, 1, 0, 255, 0, 255]);
+      print("Command for sleep data requested successfully.");
+    } catch (e) {
+      print("Failed to request sleep data: $e");
+      // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
+    }
+    _secondbluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received Sleep: ${value[1]}');
+      }
+    });
     // Today
     // await _secondbluetoothCharacteristicWrite.write(
     //   QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
@@ -1082,60 +1085,63 @@ class _DeviceScreenState extends State<DeviceScreen> {
       }
     });
   }
-  
-
 
 // Function to build the 4-byte payload for ReadSleepDetailsReq
-List<int> buildReadSleepDetailsReqPayload(int dayOffset, int startIndex, int endIndex) {
-  if (dayOffset > 29) {
-    throw ArgumentError("dayOffset cannot be greater than 29");
+  List<int> buildReadSleepDetailsReqPayload(
+      int dayOffset, int startIndex, int endIndex) {
+    if (dayOffset > 29) {
+      throw ArgumentError("dayOffset cannot be greater than 29");
+    }
+    if (startIndex > endIndex || endIndex > 95) {
+      throw ArgumentError(
+          "Data segment index value is abnormal (startIndex > endIndex or endIndex > 95)");
+    }
+    return [
+      dayOffset & 0xFF, // Ensure it's treated as an unsigned byte
+      15, // Constant value 15
+      startIndex & 0xFF, // Ensure it's treated as an unsigned byte
+      endIndex & 0xFF // Ensure it's treated as an unsigned byte
+    ];
   }
-  if (startIndex > endIndex || endIndex > 95) {
-    throw ArgumentError("Data segment index value is abnormal (startIndex > endIndex or endIndex > 95)");
-  }
-  return [
-    dayOffset & 0xFF,    // Ensure it's treated as an unsigned byte
-    15,                  // Constant value 15
-    startIndex & 0xFF,   // Ensure it's treated as an unsigned byte
-    endIndex & 0xFF      // Ensure it's treated as an unsigned byte
-  ];
-}
 
 // Function to build the full 16-byte BLE command packet
-List<int> buildBleCommandPacket(int commandId, List<int> payload) {
-  const int totalPacketLength = 16; // Corresponds to Constants.CMD_DATA_LENGTH
-  final List<int> packet = List<int>.filled(totalPacketLength, 0);
+  List<int> buildBleCommandPacket(int commandId, List<int> payload) {
+    const int totalPacketLength =
+        16; // Corresponds to Constants.CMD_DATA_LENGTH
+    final List<int> packet = List<int>.filled(totalPacketLength, 0);
 
-  // Header byte: 0xA5 (which is -91 as a signed byte in Java)
-  packet[0] = 0xA5;
+    // Header byte: 0xA5 (which is -91 as a signed byte in Java)
+    packet[0] = 0xA5;
 
-  // Command ID
-  packet[1] = commandId & 0xFF; // CMD_GET_SLEEP is 68 (0x44)
+    // Command ID
+    packet[1] = commandId & 0xFF; // CMD_GET_SLEEP is 68 (0x44)
 
-  // Payload Length
-  packet[2] = payload.length & 0xFF; // Should be 4 for ReadSleepDetailsReq
+    // Payload Length
+    packet[2] = payload.length & 0xFF; // Should be 4 for ReadSleepDetailsReq
 
-  // Copy Payload Data
-  for (int i = 0; i < payload.length; i++) {
-    if (i + 3 < totalPacketLength - 1) { // Ensure we don't write beyond the padding before checksum
-      packet[i + 3] = payload[i];
-    } else {
-      // This case indicates payload is too long for packet structure,
-      // but for this specific command (4 bytes payload), it won't happen.
-      print("Warning: Payload overflow during packet construction!");
+    // Copy Payload Data
+    for (int i = 0; i < payload.length; i++) {
+      if (i + 3 < totalPacketLength - 1) {
+        // Ensure we don't write beyond the padding before checksum
+        packet[i + 3] = payload[i];
+      } else {
+        // This case indicates payload is too long for packet structure,
+        // but for this specific command (4 bytes payload), it won't happen.
+        print("Warning: Payload overflow during packet construction!");
+      }
     }
+
+    // Calculate Checksum (sum of all bytes from index 0 to (totalPacketLength - 2))
+    int checksum = 0;
+    for (int i = 0; i < totalPacketLength - 1; i++) {
+      // Sum all bytes except the last one (checksum byte itself)
+      checksum += packet[i];
+    }
+    packet[totalPacketLength - 1] =
+        checksum & 0xFF; // Store the last byte as checksum
+
+    return packet;
   }
-
-  // Calculate Checksum (sum of all bytes from index 0 to (totalPacketLength - 2))
-  int checksum = 0;
-  for (int i = 0; i < totalPacketLength - 1; i++) { // Sum all bytes except the last one (checksum byte itself)
-    checksum += packet[i];
-  }
-  packet[totalPacketLength - 1] = checksum & 0xFF; // Store the last byte as checksum
-
-  return packet;
-}
-
 
   @override
   Widget build(BuildContext context) {
