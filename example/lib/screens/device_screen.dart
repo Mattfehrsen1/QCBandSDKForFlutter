@@ -943,7 +943,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       // [188, 39, 1, 0, 63, 66, 6] index 6
 
       await _secondbluetoothCharacteristicWrite
-          .write(QCBandSDK.getSleepData(0));
+          .write(QCBandSDK.getSleepData(1));
       print("Command for sleep data requested successfully.");
     } catch (e) {
       print("Failed to request sleep data: $e");
