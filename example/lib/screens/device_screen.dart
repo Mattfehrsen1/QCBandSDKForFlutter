@@ -16,6 +16,7 @@ import '../utils/snackbar.dart';
 import '../utils/extra.dart';
 import 'package:qc_band_sdk_for_flutter/qc_band_sdk_for_flutter.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/blood_oxygen_entity.dart';
+import 'package:qc_band_sdk_for_flutter/bean/models/sleepModel.dart';
 
 class DeviceScreen extends StatefulWidget {
   final BluetoothDevice device;
@@ -942,7 +943,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       // [188, 39, 1, 0, 63, 66, 6] index 6
 
       await _secondbluetoothCharacteristicWrite
-          .write([188, 39, 1, 0, 63, 66, 6]);
+          .write(QCBandSDK.getSleepData(0));
       print("Command for sleep data requested successfully.");
     } catch (e) {
       print("Failed to request sleep data: $e");
@@ -956,9 +957,12 @@ class _DeviceScreenState extends State<DeviceScreen> {
       // Handle the received value (List<int>)
       print('Received notification: ${value.length}');
       if (value.isNotEmpty) {
+        SleepParser sleepParser = SleepParser(value);
+        List<int> sleepData = sleepParser.getRemainingElements();
+        print('Parsed Sleep Data: $sleepData');
         // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
         // print(recievedHRVData);
-        log('Received Sleep: ${value[1]}');
+        // log('Received Sleep: ${value[1]}');
         //Combine the List after call
       }
     });

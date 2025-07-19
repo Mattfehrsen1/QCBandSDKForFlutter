@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:core';
 import 'dart:developer';
 import 'dart:typed_data';
@@ -717,15 +718,33 @@ class QCBandSDK {
     return Uint8List.fromList(commandPacket);
   }
 
-  static Uint8List getSleepData() {
+  static Uint8List getSleepData(int index) {
     // Testing to send raw command on ACTION_Blood_Oxygen = 42 and see how it respond.
     // The command ID for blood oxygen is 42.
     // The data payload for this command is a single byte with value -1.
-    Uint8List requestDataPayload =
-        Uint8List.fromList([-1]); // Represents the byte 0xFF
-    Uint8List commandPacket = ResolveUtil().addHeader(39, requestDataPayload);
-
-    return Uint8List.fromList(commandPacket);
+// [188, 39, 1, 0, 191, 64, 0]
+    if (index == 0) {
+      return Uint8List.fromList([188, 39, 1, 0, 191, 64, 0]);
+    } else if (index == 1) {
+      return Uint8List.fromList([188, 39, 1, 0, 126, 128, 1]);
+    } else if (index == 2) {
+      // [188, 39, 1, 0, 62, 129, 2]
+      return Uint8List.fromList([188, 39, 1, 0, 62, 129, 2]);
+    } else if (index == 3) {
+      // [188, 39, 1, 0, 255, 65, 3]
+      return Uint8List.fromList([188, 39, 1, 0, 255, 65, 3]);
+    } else if (index == 4) {
+      // [188, 39, 1, 0, 190, 131, 4]
+      return Uint8List.fromList([188, 39, 1, 0, 190, 131, 4]);
+    } else if (index == 5) {
+      //  [188, 39, 1, 0, 127, 67, 5]
+      return Uint8List.fromList([188, 39, 1, 0, 127, 67, 5]);
+    } else if (index == 6) {
+      // [188, 39, 1, 0, 63, 66, 6]
+      return Uint8List.fromList([188, 39, 1, 0, 63, 66, 6]);
+    } else {
+      return Uint8List.fromList([]);
+    }
   }
 
   static Uint8List getBloodPressureWrong(int offset) {
