@@ -908,19 +908,50 @@ class _DeviceScreenState extends State<DeviceScreen> {
       // Use `withoutResponse: false` if you expect an acknowledgment.
       // Use `withoutResponse: true` for faster writes if no response is needed at the GATT layer.
       // The Java code implies a response is expected (ICommandResponse), so 'false' is safer.
+
+      // //7 days
+      //dayIndex: 0-6,0:today,1:yesterday ... // Response is
+      // I/flutter (26215): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 35, 0, 206, 145, 1, 0, 32, 219, 0, 191, 1,
+      //2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]} [ Correct ]
+      // Today [188, 39, 1, 0, 191, 64, 0]
+// ------------------------
+      // I/flutter (26215): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 73, 0, 64, 66, 2, 1, 36, 120, 5, 136, 1,
+      // 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, [ Till here ] [ Correct]
+      // 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]} [ Dump Value ]
+      // Yesterday [188, 39, 1, 0, 126, 128, 1] index 1
+// -----------------------
+//I/flutter (26215): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 111, 0, 194, 205, 3, 2, 36, 128, 5, 144, 1,
+      // 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, [ Till here ] [ Correct]
+      //1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]} [ Dump Value ]
+      // [188, 39, 1, 0, 62, 129, 2] index 2
+      // -----------------------------
+      // I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 111, 0, 194, 205, 3, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
+      // No data being present here.
+      // [188, 39, 1, 0, 255, 65, 3] index 3
       //
-      await _secondbluetoothCharacteristicWrite.write(
-        QCBandSDK.getSleepData(),
-      );
+      // --------------------------
+      // I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 149, 0, 162, 28, 4, 4, 36, 106, 5, 126, 1, 2, 24, 3, 22, 2, 24, 4, 18, 3, 32, 2, 23, 4, 19, 3, 33, 4, 16, 2, 54, 3, 23, 4, 22, 2, 52, 3, 25, 5, 3, 2, 46, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
+      // [188, 39, 1, 0, 190, 131, 4] index 4
+// // ----------------------------------
+// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 187, 0, 223, 116, 5, 5, 36, 85, 0, 129, 1, 2, 16, 3, 33, 2, 37, 4, 14, 3, 11, 2, 21, 3, 10, 4, 18, 3, 32, 4, 17, 2, 30, 3, 32, 5, 4, 4, 9, 5, 6, 2, 10, 4, 36, 106, 5, 126, 1, 2, 24, 3, 22, 2, 24, 4, 18, 3, 32, 2, 23, 4, 19, 3, 33, 4, 16, 2, 54, 3, 23, 4, 22, 2, 52, 3, 25, 5, 3, 2, 46, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3]}
+// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
+//       // [188, 39, 1, 0, 127, 67, 5] index 5
+// // ---------------------------
+// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 187, 0, 223, 116, 5, 5, 36, 85, 0, 129, 1, 2, 16, 3, 33, 2, 37, 4, 14, 3, 11, 2, 21, 3, 10, 4, 18, 3, 32, 4, 17, 2, 30, 3, 32, 5, 4, 4, 9, 5, 6, 2, 10, 4, 36, 106, 5, 126, 1, 2, 24, 3, 22, 2, 24, 4, 18, 3, 32, 2, 23, 4, 19, 3, 33, 4, 16, 2, 54, 3, 23, 4, 22, 2, 52, 3, 25, 5, 3, 2, 46, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3]}
+// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
+      // [188, 39, 1, 0, 63, 66, 6] index 6
+
+      await _secondbluetoothCharacteristicWrite
+          .write([188, 39, 1, 0, 63, 66, 6]);
       print("Command for sleep data requested successfully.");
     } catch (e) {
       print("Failed to request sleep data: $e");
       // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
     }
-    // Parsing Sleep Data Steps 
-    // 1. Combine the both element after call. 
+    // Parsing Sleep Data Steps
+    // 1. Combine the both element after call.
     // 2. Know what data been mising by extracting and missing days [ Seperate the data by date] i.e  0,36 [Today] 1, 36 [Today - 1] 2, 36 [Today - 2] 3, 36 [Today - 3] 4, 36 [Today - 4], 5, 36 [Today - 5] 6, 36 [Today - 6]
-    // 3. Calculate the deep sleep, light sleep , Rapid eye movement , awake 
+    // 3. Calculate the deep sleep, light sleep , Rapid eye movement , awake
     _secondbluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: ${value.length}');
