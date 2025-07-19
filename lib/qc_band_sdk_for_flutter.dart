@@ -717,6 +717,17 @@ class QCBandSDK {
     return Uint8List.fromList(commandPacket);
   }
 
+  static Uint8List getSleepData() {
+    // Testing to send raw command on ACTION_Blood_Oxygen = 42 and see how it respond.
+    // The command ID for blood oxygen is 42.
+    // The data payload for this command is a single byte with value -1.
+    Uint8List requestDataPayload =
+        Uint8List.fromList([-1]); // Represents the byte 0xFF
+    Uint8List commandPacket = ResolveUtil().addHeader(39, requestDataPayload);
+
+    return Uint8List.fromList(commandPacket);
+  }
+
   static Uint8List getBloodPressureWrong(int offset) {
     List<int> bytes = List.filled(16, 0);
 
@@ -871,16 +882,16 @@ class QCBandSDK {
     final List<int> value = _generateInitValue();
 
     // Step 2: Place the command code and payload bytes
+    value[0] = 188;
+    value[1] = 39; // Main Command Code (decimal 68)
 
-    value[0] = 68; // Main Command Code (decimal 68)
+    value[2] = dayOffset;
 
-    value[1] = dayOffset;
+    value[3] = 15; // Fixed value from ReadSleepDetailsReq
 
-    value[2] = 15; // Fixed value from ReadSleepDetailsReq
+    value[4] = startIndex;
 
-    value[3] = startIndex;
-
-    value[4] = endIndex;
+    value[5] = endIndex;
 
     _crcValue(value);
 
