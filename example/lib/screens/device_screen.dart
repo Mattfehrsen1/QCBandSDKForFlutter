@@ -957,13 +957,37 @@ class _DeviceScreenState extends State<DeviceScreen> {
       // Handle the received value (List<int>)
       print('Received notification: ${value.length}');
       if (value.isNotEmpty) {
-        SleepParser sleepParser = SleepParser(value);
-        List<int> sleepData = sleepParser.getRemainingElements();
-        print('Parsed Sleep Data: $sleepData');
-        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
-        // print(recievedHRVData);
-        // log('Received Sleep: ${value[1]}');
-        //Combine the List after call
+        // Create an instance of the SleepParser
+        final SleepParser parser = SleepParser(value);
+
+        // Get the first 13 elements
+        final List<int> firstThirteen = parser.getFirstThirteenElements();
+        print("First 13 elements: $firstThirteen");
+
+        // Get the remaining elements as pairs
+        final List<List<int>> remainingElementsPairs =
+            parser.getRemainingElements();
+        print("Remaining elements (in pairs): $remainingElementsPairs");
+
+        // Calculate and print the sum of second values for pairs starting with 2
+        final int sumOfLightSleep = parser.sumLightSleep();
+        print("Sum of Light Sleep (pairs starting with 2): $sumOfLightSleep");
+
+        final int sumOfDeepSleep = parser.sumDeepSleep();
+        print("Sum of Deep Sleep (pairs starting with 3): $sumOfDeepSleep");
+
+        final int sumOfRapidEyeMoment = parser.sumRapidEyeMoment();
+        // Corrected expected value for sampleData: 13 (from [4,13]) + 6 (from [4,6]) + 12 (from [4,12]) + 12 (from [4,12]) = 43
+        print(
+            "Sum of Rapid Eye Movement (pairs starting with 4): $sumOfRapidEyeMoment");
+
+        final int sumOfAwake = parser.sumAwake();
+        // Corrected expected value for sampleData: 2 (from [5,2]) + 8 (from [5,8]) = 10
+        print("Sum of Awake (pairs starting with 5): $sumOfAwake");
+
+        // Get and print the sleep summary
+        final Map<String, int> sleepSummary = parser.getSleepSummary();
+        print("\nSleep Summary: $sleepSummary");
       }
     });
     // Today
