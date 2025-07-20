@@ -1134,23 +1134,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
-// Function to build the 4-byte payload for ReadSleepDetailsReq
-  List<int> buildReadSleepDetailsReqPayload(
-      int dayOffset, int startIndex, int endIndex) {
-    if (dayOffset > 29) {
-      throw ArgumentError("dayOffset cannot be greater than 29");
-    }
-    if (startIndex > endIndex || endIndex > 95) {
-      throw ArgumentError(
-          "Data segment index value is abnormal (startIndex > endIndex or endIndex > 95)");
-    }
-    return [
-      dayOffset & 0xFF, // Ensure it's treated as an unsigned byte
-      15, // Constant value 15
-      startIndex & 0xFF, // Ensure it's treated as an unsigned byte
-      endIndex & 0xFF // Ensure it's treated as an unsigned byte
-    ];
-  }
+
 
   @override
   Widget build(BuildContext context) {
