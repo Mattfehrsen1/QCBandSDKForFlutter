@@ -897,53 +897,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   sleepDetailData() async {
+    int currentDay = 1;
     try {
-      // 2. Build the full 16-byte command packet
-      // final List<int> fullCommandPacket =
-      //     buildBleCommandPacket(cmdGetSleep, payload);
-
-      // print(
-      //     "Attempting to send command: $fullCommandPacket (Length: ${fullCommandPacket.length})");
-
-      // 3. Write the packet to the characteristic
-      // Use `withoutResponse: false` if you expect an acknowledgment.
-      // Use `withoutResponse: true` for faster writes if no response is needed at the GATT layer.
-      // The Java code implies a response is expected (ICommandResponse), so 'false' is safer.
-
-      // //7 days
-      //dayIndex: 0-6,0:today,1:yesterday ... // Response is
-      // I/flutter (26215): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 35, 0, 206, 145, 1, 0, 32, 219, 0, 191, 1,
-      //2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]} [ Correct ]
-      // Today [188, 39, 1, 0, 191, 64, 0]
-// ------------------------
-      // I/flutter (26215): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 73, 0, 64, 66, 2, 1, 36, 120, 5, 136, 1,
-      // 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, [ Till here ] [ Correct]
-      // 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]} [ Dump Value ]
-      // Yesterday [188, 39, 1, 0, 126, 128, 1] index 1
-// -----------------------
-//I/flutter (26215): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 111, 0, 194, 205, 3, 2, 36, 128, 5, 144, 1,
-      // 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, [ Till here ] [ Correct]
-      //1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]} [ Dump Value ]
-      // [188, 39, 1, 0, 62, 129, 2] index 2
-      // -----------------------------
-      // I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 111, 0, 194, 205, 3, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
-      // No data being present here.
-      // [188, 39, 1, 0, 255, 65, 3] index 3
-      //
-      // --------------------------
-      // I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 149, 0, 162, 28, 4, 4, 36, 106, 5, 126, 1, 2, 24, 3, 22, 2, 24, 4, 18, 3, 32, 2, 23, 4, 19, 3, 33, 4, 16, 2, 54, 3, 23, 4, 22, 2, 52, 3, 25, 5, 3, 2, 46, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3, 20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
-      // [188, 39, 1, 0, 190, 131, 4] index 4
-// // ----------------------------------
-// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 187, 0, 223, 116, 5, 5, 36, 85, 0, 129, 1, 2, 16, 3, 33, 2, 37, 4, 14, 3, 11, 2, 21, 3, 10, 4, 18, 3, 32, 4, 17, 2, 30, 3, 32, 5, 4, 4, 9, 5, 6, 2, 10, 4, 36, 106, 5, 126, 1, 2, 24, 3, 22, 2, 24, 4, 18, 3, 32, 2, 23, 4, 19, 3, 33, 4, 16, 2, 54, 3, 23, 4, 22, 2, 52, 3, 25, 5, 3, 2, 46, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3]}
-// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
-//       // [188, 39, 1, 0, 127, 67, 5] index 5
-// // ---------------------------
-// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [188, 39, 187, 0, 223, 116, 5, 5, 36, 85, 0, 129, 1, 2, 16, 3, 33, 2, 37, 4, 14, 3, 11, 2, 21, 3, 10, 4, 18, 3, 32, 4, 17, 2, 30, 3, 32, 5, 4, 4, 9, 5, 6, 2, 10, 4, 36, 106, 5, 126, 1, 2, 24, 3, 22, 2, 24, 4, 18, 3, 32, 2, 23, 4, 19, 3, 33, 4, 16, 2, 54, 3, 23, 4, 22, 2, 52, 3, 25, 5, 3, 2, 46, 2, 36, 128, 5, 144, 1, 2, 32, 3, 13, 4, 9, 2, 35, 3, 15, 2, 14, 3, 32, 4, 11, 2, 28, 3, 52, 4, 26, 3, 56, 4, 15, 2, 44, 4, 24, 2, 26, 1, 36, 120, 5, 136, 1, 2, 21, 3, 37, 4, 10, 2, 36, 3, 28, 2, 35, 4, 11, 2, 31, 4, 12, 3, 26, 4, 28, 3, 19, 2, 23, 3, 49, 4, 18, 2, 48, 0, 32, 219, 0, 191, 1, 2, 14, 3, 18, 4, 13, 2, 37, 3, 28, 4, 6, 5, 2, 4, 12, 3]}
-// I/flutter (31858): [FBP] [[ OnCharacteristicReceived ]] result: {error_string: GATT_SUCCESS, service_uuid: de5bf728-d711-4e47-af26-65e3012a5dc7, success: 1, remote_id: 31:38:44:37:23:00, error_code: 0, characteristic_uuid: de5bf729-d711-4e47-af26-65e3012a5dc7, value: [20, 2, 20, 5, 8, 4, 12, 2, 26, 2, 12]}
-      // [188, 39, 1, 0, 63, 66, 6] index 6
-
       await _secondbluetoothCharacteristicWrite
-          .write(QCBandSDK.getSleepData(1));
+          .write(QCBandSDK.getSleepData(currentDay));
       print("Command for sleep data requested successfully.");
     } catch (e) {
       print("Failed to request sleep data: $e");
@@ -957,37 +914,53 @@ class _DeviceScreenState extends State<DeviceScreen> {
       // Handle the received value (List<int>)
       print('Received notification: ${value.length}');
       if (value.isNotEmpty) {
-        // Create an instance of the SleepParser
-        final SleepParser parser = SleepParser(value);
+        // For Today
+        if (currentDay == 0) {
+          // Create an instance of the SleepParser
+          final SleepParser parser = SleepParser(value);
 
-        // Get the first 13 elements
-        final List<int> firstThirteen = parser.getFirstThirteenElements();
-        print("First 13 elements: $firstThirteen");
+          // Get the first 13 elements
+          final List<int> firstThirteen = parser.getFirstThirteenElements();
+          print("First 13 elements: $firstThirteen");
 
-        // Get the remaining elements as pairs
-        final List<List<int>> remainingElementsPairs =
-            parser.getRemainingElements();
-        print("Remaining elements (in pairs): $remainingElementsPairs");
+          // Get the remaining elements as pairs
+          final List<List<int>> remainingElementsPairs =
+              parser.getRemainingElements();
+          print("Remaining elements (in pairs): $remainingElementsPairs");
 
-        // Calculate and print the sum of second values for pairs starting with 2
-        final int sumOfLightSleep = parser.sumLightSleep();
-        print("Sum of Light Sleep (pairs starting with 2): $sumOfLightSleep");
+          // Calculate and print the sum of second values for pairs starting with 2
+          final int sumOfLightSleep = parser.sumLightSleep();
+          print("Sum of Light Sleep (pairs starting with 2): $sumOfLightSleep");
 
-        final int sumOfDeepSleep = parser.sumDeepSleep();
-        print("Sum of Deep Sleep (pairs starting with 3): $sumOfDeepSleep");
+          final int sumOfDeepSleep = parser.sumDeepSleep();
+          print("Sum of Deep Sleep (pairs starting with 3): $sumOfDeepSleep");
 
-        final int sumOfRapidEyeMoment = parser.sumRapidEyeMoment();
-        // Corrected expected value for sampleData: 13 (from [4,13]) + 6 (from [4,6]) + 12 (from [4,12]) + 12 (from [4,12]) = 43
-        print(
-            "Sum of Rapid Eye Movement (pairs starting with 4): $sumOfRapidEyeMoment");
+          final int sumOfRapidEyeMoment = parser.sumRapidEyeMoment();
+          // Corrected expected value for sampleData: 13 (from [4,13]) + 6 (from [4,6]) + 12 (from [4,12]) + 12 (from [4,12]) = 43
+          print(
+              "Sum of Rapid Eye Movement (pairs starting with 4): $sumOfRapidEyeMoment");
 
-        final int sumOfAwake = parser.sumAwake();
-        // Corrected expected value for sampleData: 2 (from [5,2]) + 8 (from [5,8]) = 10
-        print("Sum of Awake (pairs starting with 5): $sumOfAwake");
+          final int sumOfAwake = parser.sumAwake();
+          // Corrected expected value for sampleData: 2 (from [5,2]) + 8 (from [5,8]) = 10
+          print("Sum of Awake (pairs starting with 5): $sumOfAwake");
 
-        // Get and print the sleep summary
-        final Map<String, int> sleepSummary = parser.getSleepSummary();
-        print("\nSleep Summary: $sleepSummary");
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
+        } else {
+          // Handle historical sleep data
+          final HistoricalSleepDataParser historicalParser =
+              HistoricalSleepDataParser(value);
+          // // Process historical sleep data as needed
+          // final List<int> remainingElements =
+          //     historicalParser.getRemainingElements();
+          // print("Remaining elements (historical): $remainingElements");
+
+          // Get pairs with values greater than 100
+          final List<List<int>> pairs =
+              historicalParser.getPairsWithValuesGreaterThan100();
+          print("Pairs with values greater than 100: $pairs");
+        }
       }
     });
     // Today
@@ -1133,8 +1106,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
       }
     });
   }
-
-
 
   @override
   Widget build(BuildContext context) {

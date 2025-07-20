@@ -153,3 +153,49 @@ class SleepParser {
     };
   }
 }
+
+// Historical Sleep Data
+class HistoricalSleepDataParser {
+  /// A model class to parse and separate data from a list of integers.
+  /// It separates the first 13 elements from the rest of the data.
+  final List<int> _data;
+
+  /// Initializes the SleepParser with the input data list.
+  ///
+  /// Throws [ArgumentError] if the input data is not a list of integers.
+  HistoricalSleepDataParser(this._data) {
+    if (_data == null || _data.any((element) => element is! int)) {
+      throw ArgumentError("Input data must be a list of integers.");
+    }
+  }
+  // Remove first 13 element
+  List<int> getRemainingElements() {
+    if (_data.length <= 13) {
+      return [];
+    }
+    return _data.sublist(13);
+  }
+
+  // find the value greater than 100 in remaining elements and then move 1 index at right and seperate the list
+  List<List<int>> getPairsWithValuesGreaterThan100() {
+    final List<int> remainingElements = getRemainingElements();
+    List<List<int>> pairs = [];
+
+    for (int i = 0; i < remainingElements.length; i++) {
+      if (remainingElements[i] > 100) {
+        // Create a pair with the current element and the next element (if it exists)
+        if (i + 1 < remainingElements.length) {
+          pairs.add([
+            remainingElements[i - 4],
+            remainingElements[i - 3],
+            remainingElements[i - 2],
+            remainingElements[i - 1],
+            remainingElements[i],
+            remainingElements[i + 1]
+          ]);
+        }
+      }
+    }
+    return pairs;
+  }
+}
