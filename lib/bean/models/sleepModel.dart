@@ -170,32 +170,33 @@ class HistoricalSleepDataParser {
   }
   // Remove first 13 element
   List<int> getRemainingElements() {
-    if (_data.length <= 13) {
-      return [];
-    }
-    return _data.sublist(13);
+    // if (_data.length <= 13) {
+    //   return [];
+    // }
+    // return _data.sublist(13);
+    return _data;
   }
 
-  // find the value greater than 100 in remaining elements and then move 1 index at right and seperate the list
-  List<List<int>> getPairsWithValuesGreaterThan100() {
-    final List<int> remainingElements = getRemainingElements();
-    List<List<int>> pairs = [];
-
-    for (int i = 0; i < remainingElements.length; i++) {
-      if (remainingElements[i] > 100) {
-        // Create a pair with the current element and the next element (if it exists)
-        if (i + 1 < remainingElements.length) {
-          pairs.add([
-            remainingElements[i - 4],
-            remainingElements[i - 3],
-            remainingElements[i - 2],
-            remainingElements[i - 1],
-            remainingElements[i],
-            remainingElements[i + 1]
-          ]);
-        }
+  // Second Apporoach
+// Steps
+// 1. Remove the first thirteen elements
+// 2. End the list if element are [0, 36, 69, 0, 161] in sequence
+  /// Removes the first thirteen elements and returns the remaining list,
+  /// but ends the list if the sequence [0, 36, 69, 0, 161] is encountered.
+  List<int> getProcessedElementsYesterday() {
+    final List<int> result = [];
+    for (int i = 0; i < _data.length; i++) {
+      // Check for the sequence [0, 36, 69, 0, 161]
+      if (i + 4 < _data.length &&
+          _data[i] == 0 &&
+          _data[i + 1] == 36 &&
+          _data[i + 2] == 69 &&
+          _data[i + 3] == 0 &&
+          _data[i + 4] == 161) {
+        break;
       }
+      result.add(_data[i]);
     }
-    return pairs;
+    return result;
   }
 }

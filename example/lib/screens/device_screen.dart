@@ -954,12 +954,30 @@ class _DeviceScreenState extends State<DeviceScreen> {
           // // Process historical sleep data as needed
           // final List<int> remainingElements =
           //     historicalParser.getRemainingElements();
-          // print("Remaining elements (historical): $remainingElements");
+          print("Elements: $value");
+          // Purpose Seperate the Yesterday data from today Data
+          // Steps
+          // 1. Identify the elements corresponding to yesterday's date
+          // 2. Extract and store these elements for further processing
+          // ---
+// Second Apporoach
+// Steps
+// 1. Remove the first thirteen elements
+// 2. End the list if element are [0, 36, 69, 0, 161] in sequence
+          final List<int> processListYesterday =
+              historicalParser.getProcessedElementsYesterday();
+          print("Elements After Truncation: $processListYesterday");
+          final SleepParser parser = SleepParser(processListYesterday);
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
+
+// ---
 
           // Get pairs with values greater than 100
-          final List<List<int>> pairs =
-              historicalParser.getPairsWithValuesGreaterThan100();
-          print("Pairs with values greater than 100: $pairs");
+          // final List<List<int>> pairs =
+          //     historicalParser.getPairsWithValuesGreaterThan100();
+          // print("Pairs with values greater than 100: $pairs");
         }
       }
     });
