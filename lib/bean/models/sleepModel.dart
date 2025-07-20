@@ -192,7 +192,8 @@ class HistoricalSleepDataParser {
           _data[i + 1] == 36 &&
           _data[i + 2] == 69 &&
           _data[i + 3] == 0 &&
-          _data[i + 4] == 161) {
+          _data[i + 4] == 161 &&
+          _data[i + 4] == 1) {
         break;
       }
       result.add(_data[i]);
