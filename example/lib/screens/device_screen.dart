@@ -897,7 +897,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   sleepDetailData() async {
-    int currentDay = 1;
+    int currentDay = 2;
     try {
       await _secondbluetoothCharacteristicWrite
           .write(QCBandSDK.getSleepData(currentDay));
@@ -947,19 +947,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
           // Get and print the sleep summary
           final Map<String, int> sleepSummary = parser.getSleepSummary();
           print("\nSleep Summary: $sleepSummary");
-        } else {
+        } else if (currentDay == 1) {
           // Handle historical sleep data
           final HistoricalSleepDataParser historicalParser =
               HistoricalSleepDataParser(value);
-          // // Process historical sleep data as needed
-          // final List<int> remainingElements =
-          //     historicalParser.getRemainingElements();
-          print("Elements: $value");
-          // Purpose Seperate the Yesterday data from today Data
-          // Steps
-          // 1. Identify the elements corresponding to yesterday's date
-          // 2. Extract and store these elements for further processing
-          // ---
 // Second Apporoach
 // Steps
 // 1. Remove the first thirteen elements
@@ -971,13 +962,26 @@ class _DeviceScreenState extends State<DeviceScreen> {
           // Get and print the sleep summary
           final Map<String, int> sleepSummary = parser.getSleepSummary();
           print("\nSleep Summary: $sleepSummary");
-
-// ---
-
-          // Get pairs with values greater than 100
-          // final List<List<int>> pairs =
-          //     historicalParser.getPairsWithValuesGreaterThan100();
-          // print("Pairs with values greater than 100: $pairs");
+        } else if (currentDay == 2) {
+          final HistoricalSleepDataParser historicalParser =
+              HistoricalSleepDataParser(value);
+          final List<int> processListIndexSecond =
+              historicalParser.getProcessedElementsIndexSecond();
+          print("Elements After Truncation: $processListIndexSecond");
+          final SleepParser parser = SleepParser(processListIndexSecond);
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
+        } else if (currentDay == 3) {
+          final HistoricalSleepDataParser historicalParser =
+              HistoricalSleepDataParser(value);
+          final List<int> processListIndexSecond =
+              historicalParser.getProcessedElementsIndexSecond();
+          print("Elements After Truncation: $processListIndexSecond");
+          final SleepParser parser = SleepParser(processListIndexSecond);
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
         }
       }
     });

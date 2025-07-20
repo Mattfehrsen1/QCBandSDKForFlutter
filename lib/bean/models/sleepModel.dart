@@ -193,7 +193,26 @@ class HistoricalSleepDataParser {
           _data[i + 2] == 69 &&
           _data[i + 3] == 0 &&
           _data[i + 4] == 161 &&
-          _data[i + 4] == 1) {
+          _data[i + 5] == 1) {
+        break;
+      }
+      result.add(_data[i]);
+    }
+    return result;
+  }
+
+  List<int> getProcessedElementsIndexSecond() {
+    // [1, 32], [219, 0], [191, 1]
+    final List<int> result = [];
+    for (int i = 0; i < _data.length; i++) {
+      // Check for the sequence [1, 32,219, 0,191, 1]
+      if (i + 5 < _data.length &&
+          _data[i] == 1 &&
+          _data[i + 1] == 32 &&
+          _data[i + 2] == 219 &&
+          _data[i + 3] == 0 &&
+          _data[i + 4] == 191 &&
+          _data[i + 5] == 1) {
         break;
       }
       result.add(_data[i]);
