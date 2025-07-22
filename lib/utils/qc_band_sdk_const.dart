@@ -40,6 +40,7 @@ class QcBandSdkConst {
   static const int actionBloodOxygen = 188;
   static const int getBloodPressureWrong = 55;
   static const int getBloodPressure = 13;
+  static const int getSleepData = 39;
 
   static const int ACTION_START = 1;
   static const int ACTION_PAUSE = 2;

@@ -2,15 +2,17 @@ class SleepParser {
   /// A model class to parse and separate data from a list of integers.
   /// It separates the first 13 elements from the rest of the data.
   final List<int> _data;
+  final int currentIndex;
 
   /// Initializes the SleepParser with the input data list.
   ///
   /// Throws [ArgumentError] if the input data is not a list of integers.
-  SleepParser(this._data) {
-    if (_data == null || _data.any((element) => element is! int)) {
-      throw ArgumentError("Input data must be a list of integers.");
-    }
-  }
+  // SleepParser(this._data ) {
+  //   if (_data == null || _data.any((element) => element is! int)) {
+  //     throw ArgumentError("Input data must be a list of integers.");
+  //   }
+  // }
+  SleepParser(this._data, {required this.currentIndex});
 
   /// Returns the first 13 elements of the data list.
   ///

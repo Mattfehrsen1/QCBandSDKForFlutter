@@ -898,33 +898,88 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   sleepDetailData() async {
     // [[ OnCharacteristicWritten ]]
-  //  [[ OnCharacteristicReceived ]]
-    int currentDay = 6;
-    // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable . 
-    // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .  
-
-    try {
-      await _secondbluetoothCharacteristicWrite
-          .write(QCBandSDK.getSleepData(currentDay));
-      print("Command for sleep data requested successfully.");
-    } catch (e) {
-      print("Failed to request sleep data: $e");
-      // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-    }
-    _secondbluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print('Received notification: ${value.length}');
-      if (value.isNotEmpty) {
-        // For Today
-
-        // Create an instance of the SleepParser
-        final SleepParser parser = SleepParser(value);
-
-        // Get and print the sleep summary
-        final Map<String, int> sleepSummary = parser.getSleepSummary();
-        print("\nSleep Summary: $sleepSummary");
+    //  [[ OnCharacteristicReceived ]]
+    int currentDay = 1;
+    // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable .
+    // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .
+    if (currentDay == 0) {
+      try {
+        await _secondbluetoothCharacteristicWrite
+            .write(QCBandSDK.getSleepData(currentDay));
+        print("Command for sleep data requested successfully.");
+      } catch (e) {
+        print("Failed to request sleep data: $e");
+        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
       }
-    });
+      _secondbluetoothCharacteristicNotification.value.listen((value) {
+        // Handle the received value (List<int>)
+        print('Received notification: ${value.length}');
+        if (value.isNotEmpty &&
+            value[0] == QcBandSdkConst.actionBloodOxygen &&
+            value[1] == QcBandSdkConst.getSleepData) {
+          // For Today
+
+          // Create an instance of the SleepParser
+          final SleepParser parser =
+              SleepParser(value, currentIndex: currentDay);
+
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
+        }
+      });
+    } else if (currentDay > 0 && currentDay < 7) {
+      List<int> sleepData1 = [];
+      List<int> sleepData2 = [];
+      try {
+        await _secondbluetoothCharacteristicWrite
+            .write(QCBandSDK.getSleepData(currentDay - 1));
+        print("Command for sleep data requested successfully.");
+      } catch (e) {
+        print("Failed to request sleep data: $e");
+        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
+      }
+      await _secondbluetoothCharacteristicNotification.lastValueStream.first
+          .then((onValue) {
+        // Handle the received value (List<int>)
+        print('Received notification: ${onValue.length}');
+        if (onValue.isNotEmpty &&
+            onValue[0] == QcBandSdkConst.actionBloodOxygen &&
+            onValue[1] == QcBandSdkConst.getSleepData) {
+          sleepData1 = onValue;
+          print('This is the first List $sleepData1}');
+        }
+      });
+      // await _secondbluetoothCharacteristicNotification.value.listen((value) {
+      //   // Handle the received value (List<int>)
+      //   print('Received notification: ${value.length}');
+      //   if (value.isNotEmpty &&
+      //       value[0] == QcBandSdkConst.actionBloodOxygen &&
+      //       value[1] == QcBandSdkConst.getSleepData) {
+      //     sleepData1 = value;
+      //     print('This is the first List $sleepData1}');
+      //   }
+      // });
+      try {
+        await _secondbluetoothCharacteristicWrite
+            .write(QCBandSDK.getSleepData(currentDay));
+        print("Command for sleep data requested successfully.");
+      } catch (e) {
+        print("Failed to request sleep data: $e");
+        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
+      }
+      await _secondbluetoothCharacteristicNotification.lastValueStream.first
+          .then((onValue) {
+        // Handle the received value (List<int>)
+        print('Received notification: ${onValue.length}');
+        if (onValue.isNotEmpty &&
+            onValue[0] == QcBandSdkConst.actionBloodOxygen &&
+            onValue[1] == QcBandSdkConst.getSleepData) {
+          sleepData1 = onValue;
+          print('This is the second List $sleepData1}');
+        }
+      });
+    }
   }
 
   deviceTimeSet() async {
