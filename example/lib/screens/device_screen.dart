@@ -960,6 +960,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       //     print('This is the first List $sleepData1}');
       //   }
       // });
+      await Future.delayed(Duration(milliseconds: 100));
       try {
         await _secondbluetoothCharacteristicWrite
             .write(QCBandSDK.getSleepData(currentDay));
@@ -975,8 +976,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
         if (onValue.isNotEmpty &&
             onValue[0] == QcBandSdkConst.actionBloodOxygen &&
             onValue[1] == QcBandSdkConst.getSleepData) {
-          sleepData1 = onValue;
-          print('This is the second List $sleepData1}');
+          sleepData2 = onValue;
+          print('This is the second List $sleepData2}');
         }
       });
     }
