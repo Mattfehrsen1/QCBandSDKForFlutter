@@ -897,7 +897,12 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   sleepDetailData() async {
-    int currentDay = 2;
+    // [[ OnCharacteristicWritten ]]
+  //  [[ OnCharacteristicReceived ]]
+    int currentDay = 6;
+    // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable . 
+    // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .  
+
     try {
       await _secondbluetoothCharacteristicWrite
           .write(QCBandSDK.getSleepData(currentDay));
@@ -906,98 +911,20 @@ class _DeviceScreenState extends State<DeviceScreen> {
       print("Failed to request sleep data: $e");
       // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
     }
-    // Parsing Sleep Data Steps
-    // 1. Combine the both element after call.
-    // 2. Know what data been mising by extracting and missing days [ Seperate the data by date] i.e  0,36 [Today] 1, 36 [Today - 1] 2, 36 [Today - 2] 3, 36 [Today - 3] 4, 36 [Today - 4], 5, 36 [Today - 5] 6, 36 [Today - 6]
-    // 3. Calculate the deep sleep, light sleep , Rapid eye movement , awake
     _secondbluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: ${value.length}');
       if (value.isNotEmpty) {
         // For Today
-        if (currentDay == 0) {
-          // Create an instance of the SleepParser
-          final SleepParser parser = SleepParser(value);
 
-          // Get the first 13 elements
-          final List<int> firstThirteen = parser.getFirstThirteenElements();
-          print("First 13 elements: $firstThirteen");
+        // Create an instance of the SleepParser
+        final SleepParser parser = SleepParser(value);
 
-          // Get the remaining elements as pairs
-          final List<List<int>> remainingElementsPairs =
-              parser.getRemainingElements();
-          print("Remaining elements (in pairs): $remainingElementsPairs");
-
-          // Calculate and print the sum of second values for pairs starting with 2
-          final int sumOfLightSleep = parser.sumLightSleep();
-          print("Sum of Light Sleep (pairs starting with 2): $sumOfLightSleep");
-
-          final int sumOfDeepSleep = parser.sumDeepSleep();
-          print("Sum of Deep Sleep (pairs starting with 3): $sumOfDeepSleep");
-
-          final int sumOfRapidEyeMoment = parser.sumRapidEyeMoment();
-          // Corrected expected value for sampleData: 13 (from [4,13]) + 6 (from [4,6]) + 12 (from [4,12]) + 12 (from [4,12]) = 43
-          print(
-              "Sum of Rapid Eye Movement (pairs starting with 4): $sumOfRapidEyeMoment");
-
-          final int sumOfAwake = parser.sumAwake();
-          // Corrected expected value for sampleData: 2 (from [5,2]) + 8 (from [5,8]) = 10
-          print("Sum of Awake (pairs starting with 5): $sumOfAwake");
-
-          // Get and print the sleep summary
-          final Map<String, int> sleepSummary = parser.getSleepSummary();
-          print("\nSleep Summary: $sleepSummary");
-        } else if (currentDay == 1) {
-          // Handle historical sleep data
-          final HistoricalSleepDataParser historicalParser =
-              HistoricalSleepDataParser(value);
-// Second Apporoach
-// Steps
-// 1. Remove the first thirteen elements
-// 2. End the list if element are [0, 36, 69, 0, 161] in sequence
-          final List<int> processListYesterday =
-              historicalParser.getProcessedElementsYesterday();
-          print("Elements After Truncation: $processListYesterday");
-          final SleepParser parser = SleepParser(processListYesterday);
-          // Get and print the sleep summary
-          final Map<String, int> sleepSummary = parser.getSleepSummary();
-          print("\nSleep Summary: $sleepSummary");
-        } else if (currentDay == 2) {
-          final HistoricalSleepDataParser historicalParser =
-              HistoricalSleepDataParser(value);
-          final List<int> processListIndexSecond =
-              historicalParser.getProcessedElementsIndexSecond();
-          print("Elements After Truncation: $processListIndexSecond");
-          final SleepParser parser = SleepParser(processListIndexSecond);
-          // Get and print the sleep summary
-          final Map<String, int> sleepSummary = parser.getSleepSummary();
-          print("\nSleep Summary: $sleepSummary");
-        } else if (currentDay == 3) {
-          final HistoricalSleepDataParser historicalParser =
-              HistoricalSleepDataParser(value);
-          final List<int> processListIndexSecond =
-              historicalParser.getProcessedElementsIndexSecond();
-          print("Elements After Truncation: $processListIndexSecond");
-          final SleepParser parser = SleepParser(processListIndexSecond);
-          // Get and print the sleep summary
-          final Map<String, int> sleepSummary = parser.getSleepSummary();
-          print("\nSleep Summary: $sleepSummary");
-        }
+        // Get and print the sleep summary
+        final Map<String, int> sleepSummary = parser.getSleepSummary();
+        print("\nSleep Summary: $sleepSummary");
       }
     });
-    // Today
-    // await _secondbluetoothCharacteristicWrite.write(
-    //   QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
-    // );
-    // _secondbluetoothCharacteristicNotification.value.listen((value) {
-    //   // Handle the received value (List<int>)
-    //   print('Received notification: $value');
-    //   if (value.isNotEmpty) {
-    //     // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
-    //     // print(recievedHRVData);
-    //     log('Received Sleep: $value');
-    //   }
-    // });
   }
 
   deviceTimeSet() async {
