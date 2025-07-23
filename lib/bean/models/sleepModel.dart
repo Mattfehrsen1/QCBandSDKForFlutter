@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 class SleepParser {
   /// A model class to parse and separate data from a list of integers.
   /// It separates the first 13 elements from the rest of the data.
@@ -146,6 +148,99 @@ class SleepParser {
 
     final int totalDuration = lightSleep + deepSleep + rapidEyeMoment + awake;
 
+    return {
+      'totalDuration': totalDuration,
+      'lightSleep': lightSleep,
+      'deepSleep': deepSleep,
+      'rapidEyeMovement': rapidEyeMoment,
+      'awake': awake,
+    };
+  }
+
+  Map<String, int> getSleepSummaryYesterday(
+      {required List<int> yesterdayList, required List<int> todayList}) {
+// Steps to follow
+// 1. Remove the first 7 elements from the todayList
+// 2. then Seperate the next 6 element in some markerYesterday.
+// 3. Remove the first 13 elements from the yesterdayList
+// 4. then Seperate the newYesterday List by using List of 6 element stored in markerYesterday. and then return the List.
+
+// 1. Remove the first 7 elements from the todayList
+    if (todayList.length >= 7) {
+      todayList = todayList.sublist(7);
+    } else {
+      // Handle cases where todayList has fewer than 7 elements
+      print(
+          "Warning: todayList has less than 7 elements. No elements removed from the start.");
+      todayList = []; // Or handle as per your logic
+    }
+
+    // 2. then Seperate the next 6 element in some markerYesterday.
+    List<int> markerYesterday = [];
+    if (todayList.length >= 6) {
+      markerYesterday = todayList.sublist(0, 5);
+      todayList =
+          todayList.sublist(6); // Remove these 6 elements after separating
+    } else {
+      print("Warning: todayList has less than 6 elements for markerYesterday.");
+      // markerYesterday will be what's available
+      markerYesterday = List.from(todayList);
+      todayList = [];
+    }
+
+    // 3. Remove the first 13 elements from the yesterdayList
+    if (yesterdayList.length >= 13) {
+      yesterdayList = yesterdayList.sublist(13);
+    } else {
+      print(
+          "Warning: yesterdayList has less than 13 elements. No elements removed from the start.");
+      yesterdayList = []; // Or handle as per your logic
+    }
+
+  
+    List<List<int>> result = [];
+    List<int> currentChunk = [];
+    int listIndex = 0;
+
+    while (listIndex < yesterdayList.length) {
+      bool markerFound = true;
+      // Check if the marker sequence is present starting from listIndex
+      if (listIndex + markerYesterday.length <= yesterdayList.length) {
+        for (int i = 0; i < markerYesterday.length; i++) {
+          if (yesterdayList[listIndex + i] != markerYesterday[i]) {
+            markerFound = false;
+            break;
+          }
+        }
+      } else {
+        markerFound = false; // Not enough elements left for the marker
+      }
+
+      if (markerFound) {
+        if (currentChunk.isNotEmpty) {
+          result.add(currentChunk);
+        }
+        currentChunk = []; // Reset for the next chunk
+        listIndex += markerYesterday.length; // Move past the marker
+      } else {
+        currentChunk.add(yesterdayList[listIndex]);
+        listIndex++;
+      }
+    }
+
+    // Add the last chunk if it's not empty
+    if (currentChunk.isNotEmpty) {
+      result.add(currentChunk);
+    }
+
+    final int lightSleep = sumLightSleep();
+    final int deepSleep = sumDeepSleep();
+    final int rapidEyeMoment = sumRapidEyeMoment();
+    final int awake = sumAwake();
+
+    final int totalDuration = lightSleep + deepSleep + rapidEyeMoment + awake;
+    log('This is the List of $todayList}');
+    log('This is the List of Yesterday $result}');
     return {
       'totalDuration': totalDuration,
       'lightSleep': lightSleep,

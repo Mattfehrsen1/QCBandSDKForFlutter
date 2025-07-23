@@ -900,6 +900,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     // [[ OnCharacteristicWritten ]]
     //  [[ OnCharacteristicReceived ]]
     int currentDay = 1;
+    bool secondQuery = false;
     // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable .
     // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .
     if (currentDay == 0) {
@@ -929,8 +930,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
         }
       });
     } else if (currentDay > 0 && currentDay < 7) {
-      List<int> sleepData1 = [];
-      List<int> sleepData2 = [];
+      List<int> sleepData1 = []; // Query data
+      List<int> sleepData2 = []; // -1 day data
       try {
         await _secondbluetoothCharacteristicWrite
             .write(QCBandSDK.getSleepData(currentDay - 1));
@@ -945,8 +946,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
         print('Received notification: ${onValue.length}');
         if (onValue.isNotEmpty &&
             onValue[0] == QcBandSdkConst.actionBloodOxygen &&
-            onValue[1] == QcBandSdkConst.getSleepData) {
+            onValue[1] == QcBandSdkConst.getSleepData &&
+            secondQuery == false) {
           sleepData1 = onValue;
+          secondQuery = true;
           print('This is the first List $sleepData1}');
         }
       });
@@ -960,7 +963,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       //     print('This is the first List $sleepData1}');
       //   }
       // });
-      await Future.delayed(Duration(milliseconds: 100));
+      await Future.delayed(Duration(seconds: 1));
       try {
         await _secondbluetoothCharacteristicWrite
             .write(QCBandSDK.getSleepData(currentDay));
@@ -979,6 +982,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
           sleepData2 = onValue;
           print('This is the second List $sleepData2}');
         }
+        // Create an instance of the SleepParser
+        final SleepParser parser2 =
+            SleepParser(sleepData2, currentIndex: currentDay);
+        // Get and print the sleep summary
+        final Map<String, int> sleepSummaryofYesterday =
+            parser2.getSleepSummaryYesterday(
+                todayList: sleepData2, yesterdayList: sleepData1);
+        // print(sleepSummaryofYesterday);
       });
     }
   }
