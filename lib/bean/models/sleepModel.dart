@@ -240,7 +240,7 @@ class SleepParser {
 
     final int totalDuration = lightSleep + deepSleep + rapidEyeMoment + awake;
     log('This is the List of $todayList}');
-    log('This is the List of Yesterday $result}');
+    log('This is the List of Yesterday ${result[0]}');
     return {
       'totalDuration': totalDuration,
       'lightSleep': lightSleep,
