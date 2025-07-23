@@ -897,97 +897,67 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   sleepDetailData() async {
-    // [[ OnCharacteristicWritten ]]
-    //  [[ OnCharacteristicReceived ]]
-    int currentDay = 3;
-    bool secondQuery = false;
-    // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable .
-    // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .
-    if (currentDay == 0) {
-      try {
-        await _secondbluetoothCharacteristicWrite
-            .write(QCBandSDK.getSleepData(currentDay));
-        print("Command for sleep data requested successfully.");
-      } catch (e) {
-        print("Failed to request sleep data: $e");
-        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-      }
-      _secondbluetoothCharacteristicNotification.value.listen((value) {
-        // Handle the received value (List<int>)
-        print('Received notification: ${value.length}');
-        if (value.isNotEmpty &&
-            value[0] == QcBandSdkConst.actionBloodOxygen &&
-            value[1] == QcBandSdkConst.getSleepData) {
-          // For Today
-
-          // Create an instance of the SleepParser
-          final SleepParser parser =
-              SleepParser(value, currentIndex: currentDay);
-
-          // Get and print the sleep summary
-          final Map<String, int> sleepSummary = parser.getSleepSummary();
-          print("\nSleep Summary: $sleepSummary");
+    // Helper function to request data and wait for a single, complete response
+    Future<List<int>> fetchSingleDayResponse(int day) async {
+      final completer = Completer<List<int>>();
+      // The listener just needs to wait for the next valid sleep data packet.
+      final subscription = _secondbluetoothCharacteristicNotification.value.listen((value) {
+        // Check if the packet is a valid sleep data response and we haven't already completed.
+        if (value.isNotEmpty && value[1] == QcBandSdkConst.getSleepData && !completer.isCompleted) {
+          completer.complete(value);
         }
       });
+
+      await _secondbluetoothCharacteristicWrite.write(QCBandSDK.getSleepData(day));
+      print("Command for sleep data for day $day requested successfully.");
+
+      // Wait for the response, with a timeout
+      final response = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        print("Timeout waiting for sleep data for day $day");
+        return [];
+      });
+
+      subscription.cancel();
+      return response;
     }
-    if (currentDay > 0) {
-      List<int> sleepData1 = []; // Query data
-      List<int> sleepData2 = []; // -1 day data
-      try {
-        await _secondbluetoothCharacteristicWrite
-            .write(QCBandSDK.getSleepData(currentDay - 1));
-        print("Command for sleep data requested successfully.");
-      } catch (e) {
-        print("Failed to request sleep data: $e");
-        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-      }
-      await _secondbluetoothCharacteristicNotification.lastValueStream.first
-          .then((onValue) {
-        // Handle the received value (List<int>)
-        print('Received notification: ${onValue.length}');
-        if (onValue.isNotEmpty &&
-            onValue[0] == QcBandSdkConst.actionBloodOxygen &&
-            onValue[1] == QcBandSdkConst.getSleepData &&
-            secondQuery == false) {
-          sleepData1 = onValue;
-          secondQuery = true;
-          print('This is the first List $sleepData1}');
-        }
-      });
 
-      await Future.delayed(Duration(seconds: 1));
-      try {
-        await _secondbluetoothCharacteristicWrite
-            .write(QCBandSDK.getSleepData(currentDay));
-        print("Command for sleep data requested successfully.");
-      } catch (e) {
-        print("Failed to request sleep data: $e");
-        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-      }
-      await _secondbluetoothCharacteristicNotification.lastValueStream.first
-          .then((onValue) {
-        // Handle the received value (List<int>)
-        print('Received notification: ${onValue.length}');
-        if (onValue.isNotEmpty &&
-            onValue[0] == QcBandSdkConst.actionBloodOxygen &&
-            onValue[1] == QcBandSdkConst.getSleepData) {
-          sleepData2 = onValue;
-          print('This is the second List $sleepData2}');
-        }
-        // Create an instance of the SleepParser
-      });
-      if (sleepData2.isNotEmpty &&
-          sleepData2.isNotEmpty &&
-          secondQuery == true) {
-        final SleepParser parser2 =
-            SleepParser(sleepData2, currentIndex: currentDay);
-        // Get and print the sleep summary
-        final Map<String, int> sleepSummaryofYesterday =
-            parser2.getSleepSummaryYesterday(
-                todayList: sleepData2, yesterdayList: sleepData1);
-        log('Sleep Summary of Yesterday: $sleepSummaryofYesterday');
-      }
+    // --- Main Logic ---
+
+    // 1. Fetch and process Today's data (Day 0) separately
+    List<int> todayData = await fetchSingleDayResponse(0);
+    if (todayData.isNotEmpty) {
+      final parser = SleepParser(todayData, currentIndex: 0);
+      print("\nSleep Summary for day 0 (Today): ${parser.getSleepSummary()}");
     }
+
+    // Keep track of the previous day's data for parsing
+    List<int> previousDayData = todayData;
+
+    // 2. Fetch and process historical data (Day 1 to 6)
+    for (int i = 1; i < 7; i++) {
+      // The device sends data for day `i` and `i-1` together when we ask for day `i`.
+      // The `getSleepSummaryYesterday` method internally splits this combined data.
+      List<int> combinedResponse = await fetchSingleDayResponse(i);
+
+      if (combinedResponse.isNotEmpty && previousDayData.isNotEmpty) {
+        final parser = SleepParser(combinedResponse, currentIndex: i);
+        final summary = parser.getSleepSummaryYesterday(
+          yesterdayList: combinedResponse, // This is the data for day `i`
+          todayList: previousDayData,      // This is the data from day `i-1`, used for the marker
+        );
+        print("\nSleep Summary for day $i: $summary");
+      }
+      // Update previousDayData for the next iteration
+      previousDayData = combinedResponse;
+
+      // Add a small delay between requests to be safe
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+  }
+
+  historicalSleepData() async {
+    // This function is deprecated as its logic has been integrated into sleepDetailData.
+    print("historicalSleepData is deprecated and its logic is now in sleepDetailData.");
   }
 
   deviceTimeSet() async {
