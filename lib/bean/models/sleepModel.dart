@@ -1,20 +1,18 @@
 import 'dart:developer';
-
 class SleepParser {
   /// A model class to parse and separate data from a list of integers.
   /// It separates the first 13 elements from the rest of the data.
   final List<int> _data;
-  final int currentIndex;
+  final int? currentIndex;
 
   /// Initializes the SleepParser with the input data list.
   ///
   /// Throws [ArgumentError] if the input data is not a list of integers.
-  // SleepParser(this._data ) {
-  //   if (_data == null || _data.any((element) => element is! int)) {
-  //     throw ArgumentError("Input data must be a list of integers.");
-  //   }
-  // }
-  SleepParser(this._data, {required this.currentIndex});
+  SleepParser(this._data, {this._currentIndex}) {
+    if (_data == null || _data.any((element) => element is! int)) {
+      throw ArgumentError("Input data must be a list of integers.");
+    }
+  }
 
   /// Returns the first 13 elements of the data list.
   ///
@@ -156,7 +154,7 @@ class SleepParser {
       'awake': awake,
     };
   }
-
+  
   Map<String, int> getSleepSummaryYesterday(
       {required List<int> yesterdayList, required List<int> todayList}) {
 // Steps to follow
@@ -164,7 +162,6 @@ class SleepParser {
 // 2. then Seperate the next 6 element in some markerYesterday.
 // 3. Remove the first 13 elements from the yesterdayList
 // 4. then Seperate the newYesterday List by using List of 6 element stored in markerYesterday. and then return the List.
-
 // 1. Remove the first 7 elements from the todayList
     if (todayList.length >= 7) {
       todayList = todayList.sublist(7);
@@ -174,7 +171,6 @@ class SleepParser {
           "Warning: todayList has less than 7 elements. No elements removed from the start.");
       todayList = []; // Or handle as per your logic
     }
-
     // 2. then Seperate the next 6 element in some markerYesterday.
     List<int> markerYesterday = [];
     if (todayList.length >= 6) {
@@ -187,7 +183,6 @@ class SleepParser {
       markerYesterday = List.from(todayList);
       todayList = [];
     }
-
     // 3. Remove the first 13 elements from the yesterdayList
     if (yesterdayList.length >= 13) {
       yesterdayList = yesterdayList.sublist(13);
@@ -196,11 +191,10 @@ class SleepParser {
           "Warning: yesterdayList has less than 13 elements. No elements removed from the start.");
       yesterdayList = []; // Or handle as per your logic
     }
-
+  
     List<List<int>> result = [];
     List<int> currentChunk = [];
     int listIndex = 0;
-
     while (listIndex < yesterdayList.length) {
       bool markerFound = true;
       // Check if the marker sequence is present starting from listIndex
@@ -214,7 +208,6 @@ class SleepParser {
       } else {
         markerFound = false; // Not enough elements left for the marker
       }
-
       if (markerFound) {
         if (currentChunk.isNotEmpty) {
           result.add(currentChunk);
@@ -226,57 +219,90 @@ class SleepParser {
         listIndex++;
       }
     }
-
     // Add the last chunk if it's not empty
     if (currentChunk.isNotEmpty) {
       result.add(currentChunk);
     }
-
-    List<List<int>> pairedList = [];
-
-    for (int i = 0; i < result[0].length; i += 2) {
-      if (i + 1 < result[0].length) {
-        // Ensure there's a second element for the pair
-        pairedList.add([result[0][i], result[0][i + 1]]);
-      } else {
-        // Handle the case if the list has an odd number of elements
-        // For example, you could add the last element as a single-element list
-        // pairedList.add([result[0][i]]);
-        print(
-            "Warning: Odd number of elements. Last element ${result[0][i]} will be ignored or handled separately.");
-      }
-    }
-    int lightSum = 0;
-    int deepSum = 0;
-    int remSum = 0;
-    int awakeSum = 0;
-
-    for (final pair in pairedList) {
-      // Ensure the pair has at least two elements to access the second value
-      if (pair.length == 2 && pair[0] == 2) {
-        lightSum += pair[1];
-      }
-      if (pair.length == 2 && pair[0] == 3) {
-        deepSum += pair[1];
-      }
-      if (pair.length == 2 && pair[0] == 4) {
-        remSum += pair[1];
-      }
-      if (pair.length == 2 && pair[0] == 5) {
-        // Handle the case for Awake sleep
-        awakeSum += pair[1];
-      }
-    }
-
-    final int totalDuration = lightSum + deepSum + remSum + awakeSum;
+    final int lightSleep = sumLightSleep();
+    final int deepSleep = sumDeepSleep();
+    final int rapidEyeMoment = sumRapidEyeMoment();
+    final int awake = sumAwake();
+    final int totalDuration = lightSleep + deepSleep + rapidEyeMoment + awake;
     log('This is the List of $todayList}');
-    log('This is the List of Yesterday ${result[0]}');
+    log('This is the List of Yesterday $result}');
     return {
       'totalDuration': totalDuration,
-      'lightSleep': lightSum,
-      'deepSleep': deepSum,
-      'rapidEyeMovement': remSum,
-      'awake': awakeSum,
+      'lightSleep': lightSleep,
+      'deepSleep': deepSleep,
+      'rapidEyeMovement': rapidEyeMoment,
+      'awake': awake,
     };
+  }
+}
+
+// Historical Sleep Data
+class HistoricalSleepDataParser {
+  /// A model class to parse and separate data from a list of integers.
+  /// It separates the first 13 elements from the rest of the data.
+  final List<int> _data;
+
+  /// Initializes the SleepParser with the input data list.
+  ///
+  /// Throws [ArgumentError] if the input data is not a list of integers.
+  HistoricalSleepDataParser(this._data) {
+    if (_data == null || _data.any((element) => element is! int)) {
+      throw ArgumentError("Input data must be a list of integers.");
+    }
+  }
+  // Remove first 13 element
+  List<int> getRemainingElements() {
+    // if (_data.length <= 13) {
+    //   return [];
+    // }
+    // return _data.sublist(13);
+    return _data;
+  }
+
+  // Second Apporoach
+// Steps
+// 1. Remove the first thirteen elements
+// 2. End the list if element are [0, 36, 69, 0, 161] in sequence
+  /// Removes the first thirteen elements and returns the remaining list,
+  /// but ends the list if the sequence [0, 36, 69, 0, 161] is encountered.
+  List<int> getProcessedElementsYesterday() {
+    final List<int> result = [];
+    for (int i = 0; i < _data.length; i++) {
+      // Check for the sequence [0, 36, 69, 0, 161]
+      if (i + 4 < _data.length &&
+          _data[i] == 0 &&
+          _data[i + 1] == 36 &&
+          _data[i + 2] == 69 &&
+          _data[i + 3] == 0 &&
+          _data[i + 4] == 161 &&
+          _data[i + 5] == 1) {
+        break;
+      }
+      result.add(_data[i]);
+    }
+    return result;
+  }
+
+  List<int> getProcessedElementsIndexSecond() {
+    // [1, 32], [219, 0], [191, 1]
+    final List<int> result = [];
+    for (int i = 0; i < _data.length; i++) {
+      // Check for the sequence [1, 32,219, 0,191, 1]
+      if (i + 5 < _data.length &&
+          _data[i] == 1 &&
+          _data[i + 1] == 32 &&
+          _data[i + 2] == 219 &&
+          _data[i + 3] == 0 &&
+          _data[i + 4] == 191 &&
+          _data[i + 5] == 1) {
+        break;
+      }
+      result.add(_data[i]);
+    }
+    return result;
   }
 }

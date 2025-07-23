@@ -447,6 +447,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
   int _lastParsedPacketIndex = -1;
   int _nextExpectedDataPointMinute =
       0; // Tracks the start time for the *next* expected HR data point
+  
+  // Class-level accumulator for step detail data
+  List<Map> _accumulatedStepDetailData = [];
 
   getHRData() async {
     // Reset state variables at the beginning of a new HR data retrieval session
@@ -602,26 +605,76 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
-  // Step Data of Today Details
-  deviceDetailStep() async {
-    var jsonData = [];
-    await _bluetoothCharacteristicWrite
-        .write(QCBandSDK.generateReadStepDetailsCommand(0, 0, 95));
-    _bluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      // print('Received notification: $value');
-      if (value.isNotEmpty) {
-        if (value[1] != 240 && value[0] == 67) {
-          print('This is the Second Value ${value[1]}');
-          jsonData.add(parseDetailStepData(value));
-        }
-        if (value[5] == value[6] - 1) {
-          log("Accumated Data $jsonData");
-          jsonData = [];
-        }
-        // var recievedBattery = QCBandSDK.DataParsingWithData(value);
-        // print(recievedBattery);
+  // Step Data Details - FIXED & FLEXIBLE
+  deviceDetailStep({int daysBack = 0, int dayCount = 1}) async {
+    print('🔧 FIXED FUNCTION CALLED - deviceDetailStep() starting...');
+    print('🔧 Parameters: daysBack=$daysBack, dayCount=$dayCount');
+    
+    // Clear previous session data
+    _accumulatedStepDetailData.clear();
+    int _expectedTotalPackets = dayCount * 8; // 8 packets per day
+    int _receivedPackets = 0;
+    
+    print('🔧 Cleared accumulated data, requesting $dayCount days starting from $daysBack days back...');
+    
+    // Request data for each day
+    for (int i = 0; i < dayCount; i++) {
+      int currentDayOffset = daysBack + i;
+      print('🔧 Requesting day offset: $currentDayOffset');
+      
+      await _bluetoothCharacteristicWrite
+          .write(QCBandSDK.generateReadStepDetailsCommand(currentDayOffset, 0, 95));
+      
+      // Small delay between requests to avoid overwhelming the device
+      if (i < dayCount - 1) {
+        await Future.delayed(Duration(milliseconds: 100));
       }
+    }
+    
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      print('🔧 NOTIFICATION LISTENER TRIGGERED: $value');
+      log('Raw step packet: $value');
+      
+      if (value.isNotEmpty && value[0] == 67) { // Command validation
+        print('🔧 COMMAND VALIDATION PASSED: value[0] = ${value[0]}');
+        
+        // Filter data packets (37) vs status packets (240)
+        print('🔧 PACKET FILTER CHECK: value[1] = ${value[1]}');
+        if (value[1] == 37) { // Data packet marker
+          print('🔧 DATA PACKET DETECTED! Processing...');
+          var parsedDetail = parseDetailStepData(value);
+          print('🔧 PARSED DETAIL: $parsedDetail');
+          _accumulatedStepDetailData.add(parsedDetail);
+          print('🔧 ADDED TO ACCUMULATOR. Total items: ${_accumulatedStepDetailData.length}');
+          
+          int packetIndex = value[5]; // Sequential index (0,1,2,3,4,5,6,7)
+          _receivedPackets++;
+          log('Added step detail packet $packetIndex: $parsedDetail');
+          print('🔧 Progress: $_receivedPackets/$_expectedTotalPackets packets received');
+          
+          // Completion detection for multiple days
+          if (_receivedPackets >= _expectedTotalPackets) {
+            log('--- All $dayCount day(s) of step detail data received ---');
+            log('Total packets received: $_receivedPackets');
+            log('Complete step data: $_accumulatedStepDetailData');
+            
+            // Sort by date and time to ensure proper chronological order
+            _accumulatedStepDetailData.sort((a, b) {
+              int dateCompare = DateTime(a['year'], a['month'], a['day'])
+                  .compareTo(DateTime(b['year'], b['month'], b['day']));
+              if (dateCompare != 0) return dateCompare;
+              return a['time'].compareTo(b['time']);
+            });
+            
+            print('🎉 SYNC COMPLETE: ${_accumulatedStepDetailData.length} time periods from $dayCount day(s)');
+          }
+        }
+        else if (value[1] == 240) {
+          log('Received status packet (ignored): $value');
+        }
+      }
+    }, onError: (error) {
+      log('Step detail stream error: $error');
     });
   }
 
@@ -897,93 +950,146 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   sleepDetailData() async {
-    // [[ OnCharacteristicWritten ]]
-    //  [[ OnCharacteristicReceived ]]
-    int currentDay = 3;
+    int currentDay = 1;
     bool secondQuery = false;
-    // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable .
-    // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .
-    if (currentDay == 0) {
-      try {
-        await _secondbluetoothCharacteristicWrite
-            .write(QCBandSDK.getSleepData(currentDay));
-        print("Command for sleep data requested successfully.");
-      } catch (e) {
-        print("Failed to request sleep data: $e");
-        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-      }
-      _secondbluetoothCharacteristicNotification.value.listen((value) {
-        // Handle the received value (List<int>)
-        print('Received notification: ${value.length}');
-        if (value.isNotEmpty &&
-            value[0] == QcBandSdkConst.actionBloodOxygen &&
-            value[1] == QcBandSdkConst.getSleepData) {
-          // For Today
-
+    try {
+      await _secondbluetoothCharacteristicWrite
+          .write(QCBandSDK.getSleepData(currentDay));
+      print("Command for sleep data requested successfully.");
+    } catch (e) {
+      print("Failed to request sleep data: $e");
+      // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
+    }
+    // Parsing Sleep Data Steps
+    // 1. Combine the both element after call.
+    // 2. Know what data been mising by extracting and missing days [ Seperate the data by date] i.e  0,36 [Today] 1, 36 [Today - 1] 2, 36 [Today - 2] 3, 36 [Today - 3] 4, 36 [Today - 4], 5, 36 [Today - 5] 6, 36 [Today - 6]
+    // 3. Calculate the deep sleep, light sleep , Rapid eye movement , awake
+    _secondbluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: ${value.length}');
+      if (value.isNotEmpty) {
+        // For Today
+        if (currentDay == 0) {
           // Create an instance of the SleepParser
-          final SleepParser parser =
-              SleepParser(value, currentIndex: currentDay);
+          final SleepParser parser = SleepParser(value);
+
+          // Get the first 13 elements
+          final List<int> firstThirteen = parser.getFirstThirteenElements();
+          print("First 13 elements: $firstThirteen");
+
+          // Get the remaining elements as pairs
+          final List<List<int>> remainingElementsPairs =
+              parser.getRemainingElements();
+          print("Remaining elements (in pairs): $remainingElementsPairs");
+
+          // Calculate and print the sum of second values for pairs starting with 2
+          final int sumOfLightSleep = parser.sumLightSleep();
+          print("Sum of Light Sleep (pairs starting with 2): $sumOfLightSleep");
+
+          final int sumOfDeepSleep = parser.sumDeepSleep();
+          print("Sum of Deep Sleep (pairs starting with 3): $sumOfDeepSleep");
+
+          final int sumOfRapidEyeMoment = parser.sumRapidEyeMoment();
+          // Corrected expected value for sampleData: 13 (from [4,13]) + 6 (from [4,6]) + 12 (from [4,12]) + 12 (from [4,12]) = 43
+          print(
+              "Sum of Rapid Eye Movement (pairs starting with 4): $sumOfRapidEyeMoment");
+
+          final int sumOfAwake = parser.sumAwake();
+          // Corrected expected value for sampleData: 2 (from [5,2]) + 8 (from [5,8]) = 10
+          print("Sum of Awake (pairs starting with 5): $sumOfAwake");
 
           // Get and print the sleep summary
           final Map<String, int> sleepSummary = parser.getSleepSummary();
           print("\nSleep Summary: $sleepSummary");
+        } else if (currentDay > 0 && currentDay < 7) {
+          List<int> sleepData1 = []; // Query data
+          List<int> sleepData2 = []; // -1 day data
+          try {
+            await _secondbluetoothCharacteristicWrite
+                .write(QCBandSDK.getSleepData(currentDay - 1));
+            print("Command for previous day sleep data requested successfully.");
+          } catch (e) {
+            print("Failed to request previous day sleep data: $e");
+            // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
+          }
+          
+          _secondbluetoothCharacteristicNotification.value.listen((onValue) {
+            // Handle the received value (List<int>)
+            print('Received notification: ${onValue.length}');
+            if (onValue.isNotEmpty &&
+                onValue[0] == QcBandSdkConst.actionBloodOxygen &&
+                onValue[1] == QcBandSdkConst.getSleepData &&
+                secondQuery == false) {
+              sleepData1 = onValue;
+              secondQuery = true;
+              print('This is the first List $sleepData1}');
+            }
+          });
+          
+          await Future.delayed(Duration(seconds: 1));
+          try {
+            await _secondbluetoothCharacteristicWrite
+                .write(QCBandSDK.getSleepData(currentDay));
+            print("Command for current day sleep data requested successfully.");
+          } catch (e) {
+            print("Failed to request current day sleep data: $e");
+            // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
+          }
+          
+          _secondbluetoothCharacteristicNotification.value.listen((onValue) {
+            // Handle the received value (List<int>)
+            print('Received notification: ${onValue.length}');
+            if (onValue.isNotEmpty &&
+                onValue[0] == QcBandSdkConst.actionBloodOxygen &&
+                onValue[1] == QcBandSdkConst.getSleepData) {
+              sleepData2 = onValue;
+              print('This is the second List $sleepData2}');
+            }
+            // Create an instance of the SleepParser
+            final SleepParser parser2 =
+                SleepParser(sleepData2, currentIndex: currentDay);
+            // Get and print the sleep summary
+            final Map<String, int> sleepSummaryofYesterday =
+                parser2.getSleepSummaryYesterday(
+                    todayList: sleepData2, yesterdayList: sleepData1);
+            // print(sleepSummaryofYesterday);
+          });
+        } else if (currentDay == 2) {
+          final HistoricalSleepDataParser historicalParser =
+              HistoricalSleepDataParser(value);
+          final List<int> processListIndexSecond =
+              historicalParser.getProcessedElementsIndexSecond();
+          print("Elements After Truncation: $processListIndexSecond");
+          final SleepParser parser = SleepParser(processListIndexSecond);
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
+        } else if (currentDay == 3) {
+          final HistoricalSleepDataParser historicalParser =
+              HistoricalSleepDataParser(value);
+          final List<int> processListIndexSecond =
+              historicalParser.getProcessedElementsIndexSecond();
+          print("Elements After Truncation: $processListIndexSecond");
+          final SleepParser parser = SleepParser(processListIndexSecond);
+          // Get and print the sleep summary
+          final Map<String, int> sleepSummary = parser.getSleepSummary();
+          print("\nSleep Summary: $sleepSummary");
         }
-      });
-    }
-    if (currentDay > 0) {
-      List<int> sleepData1 = []; // Query data
-      List<int> sleepData2 = []; // -1 day data
-      try {
-        await _secondbluetoothCharacteristicWrite
-            .write(QCBandSDK.getSleepData(currentDay - 1));
-        print("Command for sleep data requested successfully.");
-      } catch (e) {
-        print("Failed to request sleep data: $e");
-        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
       }
-      await _secondbluetoothCharacteristicNotification.lastValueStream.first
-          .then((onValue) {
-        // Handle the received value (List<int>)
-        print('Received notification: ${onValue.length}');
-        if (onValue.isNotEmpty &&
-            onValue[0] == QcBandSdkConst.actionBloodOxygen &&
-            onValue[1] == QcBandSdkConst.getSleepData &&
-            secondQuery == false) {
-          sleepData1 = onValue;
-          secondQuery = true;
-          print('This is the first List $sleepData1}');
-        }
-      });
-
-      await Future.delayed(Duration(seconds: 1));
-      try {
-        await _secondbluetoothCharacteristicWrite
-            .write(QCBandSDK.getSleepData(currentDay));
-        print("Command for sleep data requested successfully.");
-      } catch (e) {
-        print("Failed to request sleep data: $e");
-        // Handle specific BLE errors (e.g., BluetoothAdapter is off, device disconnected)
-      }
-      await _secondbluetoothCharacteristicNotification.lastValueStream.first
-          .then((onValue) {
-        // Handle the received value (List<int>)
-        print('Received notification: ${onValue.length}');
-        if (onValue.isNotEmpty &&
-            onValue[0] == QcBandSdkConst.actionBloodOxygen &&
-            onValue[1] == QcBandSdkConst.getSleepData) {
-          sleepData2 = onValue;
-          print('This is the second List $sleepData2}');
-        }
-        // Create an instance of the SleepParser
-      });
-      final SleepParser parser2 =
-          SleepParser(sleepData2, currentIndex: currentDay);
-      // Get and print the sleep summary
-      final Map<String, int> sleepSummaryofYesterday =
-          parser2.getSleepSummaryYesterday(
-              todayList: sleepData2, yesterdayList: sleepData1);
-      log('Sleep Summary of Yesterday: $sleepSummaryofYesterday');
-    }
+    });
+    // Today
+    // await _secondbluetoothCharacteristicWrite.write(
+    //   QCBandSDK.generateReadSleepDetailsCommand(1, 0, 95),
+    // );
+    // _secondbluetoothCharacteristicNotification.value.listen((value) {
+    //   // Handle the received value (List<int>)
+    //   print('Received notification: $value');
+    //   if (value.isNotEmpty) {
+    //     // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+    //     // print(recievedHRVData);
+    //     log('Received Sleep: $value');
+    //   }
+    // });
   }
 
   deviceTimeSet() async {
@@ -1192,6 +1298,13 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     // Parse Response
                   },
                   child: Text('Device Details Step Data')),
+              TextButton(
+                  onPressed: () {
+                    // Test 3-day sync: today + yesterday + day before
+                    deviceDetailStep(daysBack: 0, dayCount: 3);
+                  },
+                  child: Text('Multi Day Step Sync (3 Days)', 
+                      style: TextStyle(color: Colors.green))),
               TextButton(
                   onPressed: () {
                     // Notify Listenner of the Command
