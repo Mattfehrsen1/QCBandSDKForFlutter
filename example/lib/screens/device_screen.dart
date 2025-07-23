@@ -976,13 +976,17 @@ class _DeviceScreenState extends State<DeviceScreen> {
         }
         // Create an instance of the SleepParser
       });
-      final SleepParser parser2 =
-          SleepParser(sleepData2, currentIndex: currentDay);
-      // Get and print the sleep summary
-      final Map<String, int> sleepSummaryofYesterday =
-          parser2.getSleepSummaryYesterday(
-              todayList: sleepData2, yesterdayList: sleepData1);
-      log('Sleep Summary of Yesterday: $sleepSummaryofYesterday');
+      if (sleepData2.isNotEmpty &&
+          sleepData2.isNotEmpty &&
+          secondQuery == true) {
+        final SleepParser parser2 =
+            SleepParser(sleepData2, currentIndex: currentDay);
+        // Get and print the sleep summary
+        final Map<String, int> sleepSummaryofYesterday =
+            parser2.getSleepSummaryYesterday(
+                todayList: sleepData2, yesterdayList: sleepData1);
+        log('Sleep Summary of Yesterday: $sleepSummaryofYesterday');
+      }
     }
   }
 
