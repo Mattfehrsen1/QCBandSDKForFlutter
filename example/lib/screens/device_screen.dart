@@ -899,7 +899,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   sleepDetailData() async {
     // [[ OnCharacteristicWritten ]]
     //  [[ OnCharacteristicReceived ]]
-    int currentDay = 1;
+    int currentDay = 3;
     bool secondQuery = false;
     // For current index = 0 , write on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and store it in a variable .
     // For current index = 1 , wrie on the _secondbluetoothCharacteristicWrite charactertics 0 and then wait for the response and remove first thirteen element and store it in a variable1 , then write on the _secondbluetoothCharacteristicWrite 1 and then wait for the response and remove the first thirteen element and store it in a variable2. Then on the variable 2 split the value based on variable1 data .
@@ -929,7 +929,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
           print("\nSleep Summary: $sleepSummary");
         }
       });
-    } else if (currentDay > 0 && currentDay < 7) {
+    }
+    if (currentDay > 0) {
       List<int> sleepData1 = []; // Query data
       List<int> sleepData2 = []; // -1 day data
       try {
@@ -953,16 +954,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           print('This is the first List $sleepData1}');
         }
       });
-      // await _secondbluetoothCharacteristicNotification.value.listen((value) {
-      //   // Handle the received value (List<int>)
-      //   print('Received notification: ${value.length}');
-      //   if (value.isNotEmpty &&
-      //       value[0] == QcBandSdkConst.actionBloodOxygen &&
-      //       value[1] == QcBandSdkConst.getSleepData) {
-      //     sleepData1 = value;
-      //     print('This is the first List $sleepData1}');
-      //   }
-      // });
+
       await Future.delayed(Duration(seconds: 1));
       try {
         await _secondbluetoothCharacteristicWrite
@@ -983,14 +975,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
           print('This is the second List $sleepData2}');
         }
         // Create an instance of the SleepParser
-        final SleepParser parser2 =
-            SleepParser(sleepData2, currentIndex: currentDay);
-        // Get and print the sleep summary
-        final Map<String, int> sleepSummaryofYesterday =
-            parser2.getSleepSummaryYesterday(
-                todayList: sleepData2, yesterdayList: sleepData1);
-        // print(sleepSummaryofYesterday);
       });
+      final SleepParser parser2 =
+          SleepParser(sleepData2, currentIndex: currentDay);
+      // Get and print the sleep summary
+      final Map<String, int> sleepSummaryofYesterday =
+          parser2.getSleepSummaryYesterday(
+              todayList: sleepData2, yesterdayList: sleepData1);
+      log('Sleep Summary of Yesterday: $sleepSummaryofYesterday');
     }
   }
 

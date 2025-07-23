@@ -197,7 +197,6 @@ class SleepParser {
       yesterdayList = []; // Or handle as per your logic
     }
 
-  
     List<List<int>> result = [];
     List<int> currentChunk = [];
     int listIndex = 0;
@@ -233,20 +232,51 @@ class SleepParser {
       result.add(currentChunk);
     }
 
-    final int lightSleep = sumLightSleep();
-    final int deepSleep = sumDeepSleep();
-    final int rapidEyeMoment = sumRapidEyeMoment();
-    final int awake = sumAwake();
+    List<List<int>> pairedList = [];
 
-    final int totalDuration = lightSleep + deepSleep + rapidEyeMoment + awake;
+    for (int i = 0; i < result[0].length; i += 2) {
+      if (i + 1 < result[0].length) {
+        // Ensure there's a second element for the pair
+        pairedList.add([result[0][i], result[0][i + 1]]);
+      } else {
+        // Handle the case if the list has an odd number of elements
+        // For example, you could add the last element as a single-element list
+        // pairedList.add([result[0][i]]);
+        print(
+            "Warning: Odd number of elements. Last element ${result[0][i]} will be ignored or handled separately.");
+      }
+    }
+    int lightSum = 0;
+    int deepSum = 0;
+    int remSum = 0;
+    int awakeSum = 0;
+
+    for (final pair in pairedList) {
+      // Ensure the pair has at least two elements to access the second value
+      if (pair.length == 2 && pair[0] == 2) {
+        lightSum += pair[1];
+      }
+      if (pair.length == 2 && pair[0] == 3) {
+        deepSum += pair[1];
+      }
+      if (pair.length == 2 && pair[0] == 4) {
+        remSum += pair[1];
+      }
+      if (pair.length == 2 && pair[0] == 5) {
+        // Handle the case for Awake sleep
+        awakeSum += pair[1];
+      }
+    }
+
+    final int totalDuration = lightSum + deepSum + remSum + awakeSum;
     log('This is the List of $todayList}');
     log('This is the List of Yesterday ${result[0]}');
     return {
       'totalDuration': totalDuration,
-      'lightSleep': lightSleep,
-      'deepSleep': deepSleep,
-      'rapidEyeMovement': rapidEyeMoment,
-      'awake': awake,
+      'lightSleep': lightSum,
+      'deepSleep': deepSum,
+      'rapidEyeMovement': remSum,
+      'awake': awakeSum,
     };
   }
 }
