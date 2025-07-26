@@ -1061,7 +1061,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   getBloodPressureDevice() async {
     // Instantiate your response parser class
-    final ReadBlePressureRsp pressureResponseParser = ReadBlePressureRsp();
+    // final ReadBlePressureRsp pressureResponseParser = ReadBlePressureRsp();
 
 // Create a list to hold the parsed pressure readings
     List<int> pressureReadings = [];
@@ -1091,36 +1091,22 @@ class _DeviceScreenState extends State<DeviceScreen> {
     } catch (e) {
       print("Error sending pressure request: $e");
     }
-    _bluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print('Received notification: $value');
-      if (value.isNotEmpty && value[0] == 13) {
-        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
-        // print(recievedHRVData);
-        log('Received notification After isNotEmpty Check : $value}');
-
-        // Process the received data using the parser
-        // The `acceptData` method returns a boolean indicating if it expects more data.
-        bool expectsMoreData =
-            pressureResponseParser.acceptData(Uint8List.fromList(value));
-        log('Expected Data Completed or not : $expectsMoreData}');
-
-        // You can decide what to do based on the return value.
-        // For example, if it returns false, it means all data for this
-        // command has been received, and you can get the final list.
-        // if (!expectsMoreData) {
-          pressureReadings = pressureResponseParser.getValueList();
-         log('Blood Pressure Reading $pressureReadings}');
-
-          print('--- All pressure data received ---');
-          for (var reading in pressureReadings) {
-            log('This is all the Blood Pressure Reading $reading}');
-          // }
-          // You may want to clear the parser for the next set of data
-          // pressureResponseParser.reset(); // Assuming you add a reset method
+    _bluetoothCharacteristicNotification.value.listen(
+      (value) {
+        // Handle the received value (List<int>
+        if (value.isNotEmpty && value[0] == 13 && value[1] == 0) {
+          log('Command Header Log $value}');
         }
-      }
-    });
+        List<int> encodedBloodPressure = [];
+        if (value.isNotEmpty && value[0] == 13 && value[1] == 1) {
+          for (var i = 0; i < value.length; i++) {
+            if (i > 1) {
+              encodedBloodPressure.add(value[i]);
+            }
+          }
+        }
+      },
+    );
   }
 
   @override
