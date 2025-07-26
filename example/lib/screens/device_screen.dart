@@ -6,6 +6,7 @@ import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:qc_band_sdk_for_flutter/bean/models/blood_pressure.dart';
 import 'package:qc_band_sdk_for_flutter/utils/qc_band_sdk_const.dart';
 import 'package:qc_band_sdk_for_flutter_example/utils/utils.dart';
 
@@ -901,18 +902,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
     Future<List<int>> fetchSingleDayResponse(int day) async {
       final completer = Completer<List<int>>();
       // The listener just needs to wait for the next valid sleep data packet.
-      final subscription = _secondbluetoothCharacteristicNotification.value.listen((value) {
+      final subscription =
+          _secondbluetoothCharacteristicNotification.value.listen((value) {
         // Check if the packet is a valid sleep data response and we haven't already completed.
-        if (value.isNotEmpty && value[1] == QcBandSdkConst.getSleepData && !completer.isCompleted) {
+        if (value.isNotEmpty &&
+            value[1] == QcBandSdkConst.getSleepData &&
+            !completer.isCompleted) {
           completer.complete(value);
         }
       });
 
-      await _secondbluetoothCharacteristicWrite.write(QCBandSDK.getSleepData(day));
+      await _secondbluetoothCharacteristicWrite
+          .write(QCBandSDK.getSleepData(day));
       print("Command for sleep data for day $day requested successfully.");
 
       // Wait for the response, with a timeout
-      final response = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+      final response = await completer.future
+          .timeout(const Duration(seconds: 5), onTimeout: () {
         print("Timeout waiting for sleep data for day $day");
         return [];
       });
@@ -943,7 +949,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
         final parser = SleepParser(combinedResponse, currentIndex: i);
         final summary = parser.getSleepSummaryYesterday(
           yesterdayList: combinedResponse, // This is the data for day `i`
-          todayList: previousDayData,      // This is the data from day `i-1`, used for the marker
+          todayList:
+              previousDayData, // This is the data from day `i-1`, used for the marker
         );
         print("\nSleep Summary for day $i: $summary");
       }
@@ -957,7 +964,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   historicalSleepData() async {
     // This function is deprecated as its logic has been integrated into sleepDetailData.
-    print("historicalSleepData is deprecated and its logic is now in sleepDetailData.");
+    print(
+        "historicalSleepData is deprecated and its logic is now in sleepDetailData.");
   }
 
   deviceTimeSet() async {
@@ -1052,6 +1060,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
   // }
 
   getBloodPressureDevice() async {
+    // Instantiate your response parser class
+    final ReadBlePressureRsp pressureResponseParser = ReadBlePressureRsp();
+
+// Create a list to hold the parsed pressure readings
+    List<int> pressureReadings = [];
     int offset = 0;
     if (_bluetoothCharacteristicWrite == null) {
       print("Write characteristic not initialized.");
@@ -1081,10 +1094,31 @@ class _DeviceScreenState extends State<DeviceScreen> {
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
-      if (value.isNotEmpty) {
+      if (value.isNotEmpty && value[0] == 13) {
         // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
         // print(recievedHRVData);
         log('Received notification After isNotEmpty Check : $value}');
+
+        // Process the received data using the parser
+        // The `acceptData` method returns a boolean indicating if it expects more data.
+        bool expectsMoreData =
+            pressureResponseParser.acceptData(Uint8List.fromList(value));
+        log('Expected Data Completed or not : $expectsMoreData}');
+
+        // You can decide what to do based on the return value.
+        // For example, if it returns false, it means all data for this
+        // command has been received, and you can get the final list.
+        // if (!expectsMoreData) {
+          pressureReadings = pressureResponseParser.getValueList();
+         log('Blood Pressure Reading $pressureReadings}');
+
+          print('--- All pressure data received ---');
+          for (var reading in pressureReadings) {
+            log('This is all the Blood Pressure Reading $reading}');
+          // }
+          // You may want to clear the parser for the next set of data
+          // pressureResponseParser.reset(); // Assuming you add a reset method
+        }
       }
     });
   }
