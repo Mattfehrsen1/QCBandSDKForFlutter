@@ -5,10 +5,20 @@ import 'package:intl/intl.dart';
 // Helper functions to replicate the Java utility classes
 class BloodPressureBle {
   parseData(List<int> bloodPressureBleHeart) {
-    return {};
+    List<Map> jsonDataParse = [];
+    for (var i = 0; i < bloodPressureBleHeart.length; i++) {
+      int heartRate = bloodPressureBleHeart[i];
+      int userAge = 18;
+      int sbp1 = CalcBloodPressureByHeart.calSbp(heartRate, userAge);
+      int dbp1 = CalcBloodPressureByHeart.calDbp(sbp1);
+      jsonDataParse.add({
+        "systolic blood Pressure": sbp1,
+        "diasystolic blood Pressure": dbp1,
+      });
+    }
+    return jsonDataParse;
   }
 }
-
 
 class CalcBloodPressureByHeart {
   static const int minBpDiff = 37;
@@ -29,7 +39,7 @@ class CalcBloodPressureByHeart {
   static int gReserveAge = -1;
   static int lastSbp = 0;
   static int lastDbp = 0;
-  
+
   static final Random _random = Random();
 
   static int calSbp(int hr, int ageInput) {

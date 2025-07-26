@@ -1064,7 +1064,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
     // final ReadBlePressureRsp pressureResponseParser = ReadBlePressureRsp();
 
 // Create a list to hold the parsed pressure readings
-    List<int> pressureReadings = [];
+
+    List<int> encodedBloodPressure = [];
+
     int offset = 0;
     if (_bluetoothCharacteristicWrite == null) {
       print("Write characteristic not initialized.");
@@ -1097,7 +1099,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
         if (value.isNotEmpty && value[0] == 13 && value[1] == 0) {
           log('Command Header Log $value}');
         }
-        List<int> encodedBloodPressure = [];
         if (value.isNotEmpty && value[0] == 13 && value[1] == 1) {
           for (var i = 0; i < value.length; i++) {
             if (i > 1) {
@@ -1107,6 +1108,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
         }
       },
     );
+    if (encodedBloodPressure.isNotEmpty) {
+      BloodPressureBle parser = BloodPressureBle();
+      var result = parser.parseData(encodedBloodPressure);
+      log('This is the Response of the Blood Pressure $result');
+    }
   }
 
   @override
