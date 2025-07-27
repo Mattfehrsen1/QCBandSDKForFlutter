@@ -1,0 +1,49 @@
+### BLE Command Documentation for Alarm Management Extracted from Decompiled APK
+
+Based on the provided code snippets, here is a complete documentation of the commands sent from the phone to the BLE device for managing alarms.
+
+#### 1. Get Alarms Command
+
+This command is used to request the alarm settings for a specific alarm index from the device.
+
+* **Purpose**: To retrieve the configuration of a single alarm.
+* **Command Structure**: A list of two bytes.
+* **Byte Breakdown**:
+    * **Byte 0 (Command ID)**: `36` (Hex `0x24`) - Corresponds to `Constants.CMD_GET_ALARM_CLOCK`.
+    * **Byte 1 (Alarm Index)**: A value from `0` to `2`, representing the index of the alarm.
+
+* **Example**: To get the alarm at index 1, the command would be `[36, 1]`.
+
+#### 2. Set/Edit Alarms Command
+
+This command is used to create a new alarm or modify an existing one on the device.
+
+* **Purpose**: To send a new or updated alarm configuration to the device.
+* **Command Structure**: A list of six bytes.
+* **Byte Breakdown**:
+    * **Byte 0 (Command ID)**: `35` (Hex `0x23`) - Corresponds to `Constants.CMD_SET_ALARM_CLOCK`.
+    * **Byte 1 (Alarm Index)**: An integer from `0` to `2` specifying which alarm to set.
+    * **Byte 2 (Enable/Disable)**: `1` for an enabled alarm, `0` for a disabled alarm.
+    * **Byte 3 (Hour)**: An integer representing the hour of the alarm (0-23).
+    * **Byte 4 (Minute)**: An integer representing the minute of the alarm (0-59).
+    * **Byte 5 (Week Mask)**: A byte used as a bitmask to specify the days of the week the alarm is active.
+        * Each bit corresponds to a day of the week, with the least significant bit (LSB) often representing Sunday.
+        * For example:
+            * `00000001` (binary) = `1` (decimal) -> Sunday
+            * `00000010` (binary) = `2` (decimal) -> Monday
+            * `01111110` (binary) = `126` (decimal) -> Monday to Friday
+
+* **Example**: To set an enabled alarm at 7:30 AM for index 0, active on Monday through Friday, the command might look like `[35, 0, 1, 7, 30, 62]`. (Here, 62 is the decimal value for binary `00111110` which represents Monday to Friday assuming a different week mapping)
+
+#### 3. Delete Alarms Command
+
+This command is used to delete an alarm from the device.
+
+* **Purpose**: To remove a specific alarm setting.
+* **Command Structure**: A list of three bytes.
+* **Byte Breakdown**:
+    * **Byte 0 (Command ID)**: `16` (Hex `0x10`) - Corresponds to `Constants.CMD_SIMPLE_KEY`.
+    * **Byte 1 (Key)**: `3` - This key specifically indicates an "Alarm" action.
+    * **Byte 2 (Value)**: `2` - This value indicates the "delete" action for the alarm.
+
+* **Example**: The command to delete an alarm is a fixed sequence `[16, 3, 2]`.
