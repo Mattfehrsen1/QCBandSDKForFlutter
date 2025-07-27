@@ -1017,6 +1017,18 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  setBloodPressureDeviceTo30Min() async {
+    // Confirmation needed is 24 is the day
+    List<int> command = [12, 2, 1, 0, 0, 24, 0, 30, 0, 0, 0, 0, 0, 0, 0, 69];
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command, // Set to true if your device doesn't send a write response
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+  }
+
   getBloodPressureDevice() async {
     // Example for Parsing the data
     int userAge = 29;
