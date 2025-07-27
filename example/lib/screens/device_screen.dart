@@ -1094,6 +1094,86 @@ class _DeviceScreenState extends State<DeviceScreen> {
     );
   }
 
+  startWorkOut() async {
+    final List<int> command = QCBandSDK.startWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  pauseWorkOut() async {
+    final List<int> command = QCBandSDK.pauseWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  continueWorkOut() async {
+    final List<int> command = QCBandSDK.continueWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  stopWorkOut() async {
+    final List<int> command = QCBandSDK.stopWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -1288,15 +1368,20 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 child: Text('Set Alarm'),
               ),
               TextButton(
-                onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
-                  // sleepDetailData();
-                  // Parse Response
-                },
+                onPressed: startWorkOut,
                 child: Text('Start WorkOut'),
+              ),
+              TextButton(
+                onPressed: pauseWorkOut,
+                child: Text('Pause WorkOut'),
+              ),
+              TextButton(
+                onPressed: continueWorkOut,
+                child: Text('Continue WorkOut'),
+              ),
+              TextButton(
+                onPressed: stopWorkOut,
+                child: Text('Stop WorkOut'),
               ),
             ],
           ),
