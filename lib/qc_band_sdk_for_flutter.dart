@@ -770,6 +770,42 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  static Uint8List startWorkOut() {
+    final List<int> value = _generateInitValue();
+    value[0] = 119;
+    value[1] = 1;
+    value[2] = 4;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List pauseWorkOut() {
+    final List<int> value = _generateInitValue();
+    value[0] = 119;
+    value[1] = 2;
+    value[2] = 4;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List continueWorkOut() {
+    final List<int> value = _generateInitValue();
+    value[0] = 119;
+    value[1] = 3;
+    value[2] = 4;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List stopWorkOut() {
+    final List<int> value = _generateInitValue();
+    value[0] = 119;
+    value[1] = 4;
+    value[2] = 4;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {
     final List<int> value = [

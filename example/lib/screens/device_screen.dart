@@ -901,18 +901,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
     Future<List<int>> fetchSingleDayResponse(int day) async {
       final completer = Completer<List<int>>();
       // The listener just needs to wait for the next valid sleep data packet.
-      final subscription = _secondbluetoothCharacteristicNotification.value.listen((value) {
+      final subscription =
+          _secondbluetoothCharacteristicNotification.value.listen((value) {
         // Check if the packet is a valid sleep data response and we haven't already completed.
-        if (value.isNotEmpty && value[1] == QcBandSdkConst.getSleepData && !completer.isCompleted) {
+        if (value.isNotEmpty &&
+            value[1] == QcBandSdkConst.getSleepData &&
+            !completer.isCompleted) {
           completer.complete(value);
         }
       });
 
-      await _secondbluetoothCharacteristicWrite.write(QCBandSDK.getSleepData(day));
+      await _secondbluetoothCharacteristicWrite
+          .write(QCBandSDK.getSleepData(day));
       print("Command for sleep data for day $day requested successfully.");
 
       // Wait for the response, with a timeout
-      final response = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+      final response = await completer.future
+          .timeout(const Duration(seconds: 5), onTimeout: () {
         print("Timeout waiting for sleep data for day $day");
         return [];
       });
@@ -943,7 +948,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
         final parser = SleepParser(combinedResponse, currentIndex: i);
         final summary = parser.getSleepSummaryYesterday(
           yesterdayList: combinedResponse, // This is the data for day `i`
-          todayList: previousDayData,      // This is the data from day `i-1`, used for the marker
+          todayList:
+              previousDayData, // This is the data from day `i-1`, used for the marker
         );
         print("\nSleep Summary for day $i: $summary");
       }
@@ -957,7 +963,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   historicalSleepData() async {
     // This function is deprecated as its logic has been integrated into sleepDetailData.
-    print("historicalSleepData is deprecated and its logic is now in sleepDetailData.");
+    print(
+        "historicalSleepData is deprecated and its logic is now in sleepDetailData.");
   }
 
   deviceTimeSet() async {
@@ -1075,6 +1082,86 @@ class _DeviceScreenState extends State<DeviceScreen> {
             false, // Set to true if your device doesn't send a write response
       );
       print("Pressure request sent successfully for offset: $offset");
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  startWorkOut() async {
+    final List<int> command = QCBandSDK.startWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  pauseWorkOut() async {
+    final List<int> command = QCBandSDK.pauseWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  continueWorkOut() async {
+    final List<int> command = QCBandSDK.pauseWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _bluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received notification After isNotEmpty Check : $value}');
+      }
+    });
+  }
+
+  stopWorkOut() async {
+    final List<int> command = QCBandSDK.stopWorkOut();
+    try {
+      await _bluetoothCharacteristicWrite!.write(
+        command,
+      );
     } catch (e) {
       print("Error sending pressure request: $e");
     }
@@ -1275,15 +1362,20 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 child: Text('Set Alarm'),
               ),
               TextButton(
-                onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
-                  // sleepDetailData();
-                  // Parse Response
-                },
+                onPressed: startWorkOut,
                 child: Text('Start WorkOut'),
+              ),
+              TextButton(
+                onPressed: pauseWorkOut,
+                child: Text('Pause WorkOut'),
+              ),
+              TextButton(
+                onPressed: continueWorkOut,
+                child: Text('Continue WorkOut'),
+              ),
+              TextButton(
+                onPressed: stopWorkOut,
+                child: Text('Stop WorkOut'),
               ),
             ],
           ),
