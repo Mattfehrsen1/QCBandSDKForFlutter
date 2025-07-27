@@ -1137,7 +1137,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   continueWorkOut() async {
-    final List<int> command = QCBandSDK.pauseWorkOut();
+    final List<int> command = QCBandSDK.continueWorkOut();
     try {
       await _bluetoothCharacteristicWrite!.write(
         command,
