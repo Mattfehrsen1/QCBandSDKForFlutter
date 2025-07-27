@@ -17,7 +17,7 @@ class BloodPressureBle {
       int dbp1 = CalcBloodPressureByHeart.cal_dbp(sbp1);
       jsonDataParse.add({
         "systolic blood Pressure": sbp1,
-        "diasystolic blood Pressure": dbp1,
+        "diastolic blood pressure": dbp1,
       });
     }
     return jsonDataParse;
