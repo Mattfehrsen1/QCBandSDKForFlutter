@@ -1085,9 +1085,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
     try {
       await _bluetoothCharacteristicWrite!.write(
-        command,
-        withoutResponse:
-            false, // Set to true if your device doesn't send a write response
+        command, // Set to true if your device doesn't send a write response
       );
       print("Pressure request sent successfully for offset: $offset");
     } catch (e) {
@@ -1096,23 +1094,26 @@ class _DeviceScreenState extends State<DeviceScreen> {
     _bluetoothCharacteristicNotification.value.listen(
       (value) {
         // Handle the received value (List<int>
+        log('Received notification: $value');
         if (value.isNotEmpty && value[0] == 13 && value[1] == 0) {
           log('Command Header Log $value}');
-        }
-        if (value.isNotEmpty && value[0] == 13 && value[1] == 1) {
-          for (var i = 0; i < value.length; i++) {
+        } else if (value.isNotEmpty && value[0] == 13 && value[1] == 1) {
+          log('Command Body Log $value}');
+          for (var i = 0; i < value.length - 1; i++) {
             if (i > 1) {
               encodedBloodPressure.add(value[i]);
             }
           }
+          log('Encoded Blood Pressure: $encodedBloodPressure');
+          BloodPressureBle parser = BloodPressureBle();
+          var result = parser.parseData(encodedBloodPressure);
+          log('This is the Response of the Blood Pressure $result');
         }
       },
     );
-    if (encodedBloodPressure.isNotEmpty) {
-      BloodPressureBle parser = BloodPressureBle();
-      var result = parser.parseData(encodedBloodPressure);
-      log('This is the Response of the Blood Pressure $result');
-    }
+    // if (encodedBloodPressure.isNotEmpty) {
+
+    // }
   }
 
   @override
