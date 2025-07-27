@@ -1024,6 +1024,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       await _bluetoothCharacteristicWrite!.write(
         command, // Set to true if your device doesn't send a write response
       );
+      print('Command Runned Successfully -------');
     } catch (e) {
       print("Error sending pressure request: $e");
     }
@@ -1225,6 +1226,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   // 4. Equivalent Write Operation in flutter_blue_plus
                 },
                 child: Text('Get BloodOxygen History'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Steps to Complete
+                  // 1. Same as liveHeartData Function
+                  setBloodPressureDeviceTo30Min();
+                },
+                child: Text('Set BloodPressure'),
               ),
               TextButton(
                 onPressed: () {
