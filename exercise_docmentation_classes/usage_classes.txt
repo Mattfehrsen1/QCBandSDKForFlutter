@@ -1,0 +1,234 @@
+2.3.9 Changes in Ring measurement data are
+proactively reported to the APP
+//Add listener
+BleOperateManager.getInstance().addOutDeviceListener(ListenerKey.He
+art,myDeviceNotifyListener)
+ListenerKey Parameter Description
+ public class ListenerKey {
+ public static int Heart=1; Heart
+ public static int BloodPressure=2; Blood Pressure
+ public static int BloodOxygen=3; Blood Oxygen
+ public static int Temperature=5; Temperature
+ public static int SportRecord=7; Sport Record
+ public static int All=7; All
+}
+Monitoring instructions
+ inner class MyDeviceNotifyListener : DeviceNotifyListener() {
+    override fun onDataResponse(resultEntity: DeviceNotifyRsp?)
+{
+ if (resultEntity!!.status == BaseRspCmd.RESULT_OK) {
+
+BleOperateManager.getInstance().removeOthersListener()
+ when (resultEntity.dataType) {
+ 1 -> {
+ //Watch heart rate test changes
+ }
+ 2 -> {
+ //Watch blood pressure test changes
+ }
+ 3 -> {
+ //Watch blood oxygen test changes
+ }
+ 4 -> {
+ //Changes in watch step counting details
+ }
+ 5 -> {
+ //Watch body temperature changes on the day
+ }
+ 7 -> {
+ //Generate new exercise records
+ }
+ 0x0c -> {
+ //730c57010000000000000000000000d7
+ val charging =
+BLEDataFormatUtils.bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[2]
+ )
+ )
+ if (charging > 0) {
+    //charging
+ } else {
+ val battery =
+BLEDataFormatUtils.bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[1]
+ )
+ )
+ //battery power
+
+ }
+ }
+ 0x12 -> {
+ //7312 00005200025100003c0000000066
+ AwLog.i(Author.HeZhiYuan,
+ ByteUtil.bytesToString(resultEntity.loadData))
+ val step = BLEDataFormatUtils.bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[1],
+ resultEntity.loadData[2],
+ resultEntity.loadData[3]
+ )
+ )
+ val calorie = BLEDataFormatUtils.bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[4],
+ resultEntity.loadData[5],
+ resultEntity.loadData[6]
+ )
+ )
+ val distance =
+BLEDataFormatUtils.bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[7],
+ resultEntity.loadData[8],
+ resultEntity.loadData[9]
+ )
+ )
+ deviceNotification(step, distance, calorie)
+ }
+ }
+ }sl
+ }
+ }
+
+ //Remove the listener. It must be removed after registration,
+otherwise multiple callbacks will appear.
+
+BleOperateManager.getInstance().removeNotifyListener(ListenerKey.He
+art)
+ //Remove all listeners
+
+BleOperateManager.getInstance().removeNotifyListener(ListenerKey.Al
+l)
+2.3.10 APP opens exercise type
+
+ // status 1 Start movement 2 Pause 3 Continue 4 End 6 Movement
+start timestamp
+ //Sport type 4 Walking 5 Jumping rope 7 Running 8 Hiking 9
+Cycling 10 Other sports 20 Hiking 21 Badminton
+ 22 Yoga 23 Aerobics 24 Spinning 25 Kayaking 26 Elliptical
+machine 27 Rowing machine 28 Table tennis 29 Tennis
+ 30 Golf 31 Basketball 32 Football 33 Volleyball 34 Rock
+climbing 35 Dance 36 Roller skating 60 Outdoor hiking
+ CommandHandle.getInstance().executeReqCmd(
+ PhoneSportReq.getSportStatus(
+ 1, sportType
+ ), gpsResponse
+ )
+
+ private var gpsResponse: ICommandResponse<AppSportRsp> =
+ ICommandResponse<AppSportRsp> { resultEntity ->
+ AwLog.i(Author.HeZhiYuan, resultEntity)
+ if (resultEntity != null) {
+ when (resultEntity.gpsStatus) {
+ 6 -> {
+ //Exercise start time (Unit second)
+ }
+ 2 -> {
+ //Exercise pause
+ }
+ 3 -> {
+ // //Exercise continues
+ }
+ 4 -> {
+ //Exercise end
+ }
+ }
+ }
+ }
+
+
+ //Report data during exercise
+ //Add motion data reporting and monitoring
+ BleOperateManager.getInstance().addSportDeviceListener(0x78,
+myDeviceSportNotifyListener)
+ //Remove sports data reporting monitoring
+
+BleOperateManager.getInstance().removeSportDeviceListener(0x78)
+ //Listening to inner classes
+ inner class MyDeviceNotifyListener :
+DeviceSportNotifyListener() {
+ override fun onDataResponse(resultEntity: DeviceNotifyRsp?)
+ override fun onDataResponse(resultEntity: DeviceNotifyRsp?)
+{
+ super.onDataResponse(resultEntity)
+
+ if (resultEntity!!.status ==
+BaseRspCmd.RESULT_OK) {
+ //Movement duration, unit seconds
+ val sportTime = bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[2],
+ resultEntity.loadData[3]
+ )
+ )
+ //Exercise real-time heart rate
+ val heart = bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[4]
+ )
+ )
+ //The number of steps generated during exercise
+will only have data when the exercise type is 4, 7, or 8, otherwise
+it will be 0
+ val step = bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[5],
+ resultEntity.loadData[6],
+ resultEntity.loadData[7]
+ )
+ )
+ //The distance generated during exercise will only
+have data when the exercise type is 4, 7, or 8, and the others will
+be 0.
+ val distance = bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[8],
+ resultEntity.loadData[9],
+ resultEntity.loadData[10]
+ )
+ )
+ //Calories generated during exercise
+ val calorie = bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[11],
+ resultEntity.loadData[12],
+ resultEntity.loadData[13]
+ )
+ )
+ )
+ //Error status during exercise
+ val status = bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[1]
+ )
+ )
+ val sportType = BLEDataFormatUtils.bytes2Int(
+ byteArrayOf(
+ resultEntity.loadData[0]
+ )
+ )
+ if (status == 0x03) {
+ //Not wearing
+ }
+ }
+ }
+ }
+
+
+ /**
+ * Convert the byte array to int type, with the high byte of
+the array first
+ *
+ * @param data
+ * @return
+ */
+ public static int bytes2Int(byte[] data) {
+ int length = data.length;
+ int res = 0;
+ for (int i = 0; i < length; i++) {
+ res |= (data[i] & 0xFF) << (8 * (length - 1 - i));
+ }
+ return res;
+ }
