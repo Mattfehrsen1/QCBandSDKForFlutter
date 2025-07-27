@@ -4,13 +4,17 @@ import 'package:intl/intl.dart';
 
 // Helper functions to replicate the Java utility classes
 class BloodPressureBle {
-  parseData(List<int> bloodPressureBleHeart) {
+  parseData(List<int> bloodPressureBleHeart,userAge) {
     List<Map> jsonDataParse = [];
+    // Remove the 0 in the list
+    bloodPressureBleHeart.removeWhere((item) => item == 0);
+    print(
+        'This is Length of the BloodPressureBle Heart $bloodPressureBleHeart');
     for (var i = 0; i < bloodPressureBleHeart.length; i++) {
       int heartRate = bloodPressureBleHeart[i];
-      int userAge = 18;
-      int sbp1 = CalcBloodPressureByHeart.calSbp(heartRate, userAge);
-      int dbp1 = CalcBloodPressureByHeart.calDbp(sbp1);
+     
+      int sbp1 = CalcBloodPressureByHeart.cal_sbp(heartRate, userAge);
+      int dbp1 = CalcBloodPressureByHeart.cal_dbp(sbp1);
       jsonDataParse.add({
         "systolic blood Pressure": sbp1,
         "diasystolic blood Pressure": dbp1,
@@ -20,66 +24,67 @@ class BloodPressureBle {
   }
 }
 
+
 class CalcBloodPressureByHeart {
-  static const int minBpDiff = 37;
-  static const int maxBpDiff = 43;
-  static const int maxSbp = 120;
-  static const int minSbp = 100;
-  static const int hrUpper = 85;
-  static const int hrLower = 65;
-  static const double hrBpRate = 0.45;
-  static const int hrDefaultValue = 80;
-  static const int ageDefault = 25;
-  static const List<int> age = [20, 30, 40, 50, 60];
-  static const List<int> ageBpCof = [-10, 5, 15, 20, 25, 30];
+  static const int MIN_BP_DIFF = 37;
+  static const int MAX_BP_DIFF = 43;
+  static const int MAX_SBP = 120;
+  static const int MIN_SBP = 100;
+  static const int HR_UPPER = 85;
+  static const int HR_LOWER = 65;
+  static const double HR_BP_RATE = 0.45;
+  static const int HR_DEFAULT_VALUE = 80;
+  static const int AGE_DEFAULT = 25;
 
-  static int gReserveSbp = 0;
-  static int gLastSbp = 0;
-  static int gLastHr = 0;
-  static int gReserveAge = -1;
-  static int lastSbp = 0;
-  static int lastDbp = 0;
+  static const List<int> AGE = [20, 30, 40, 50, 60];
+  static const List<int> AGE_BP_COF = [-10, 5, 15, 20, 25, 30];
 
-  static final Random _random = Random();
+  static int g_reserve_sbp = 0;
+  static int g_last_sbp = 0;
+  static int g_last_hr = 0;
+  static int g_reserve_age = -1;
+  static int last_sbp = 0;
+  static int last_dbp = 0;
 
-  static int calSbp(int hr, int ageInput) {
+  static int cal_sbp(int hr, int age) {
     int sbp;
-    // The following variables were not used but are here for completeness
-    // int age = ageInput;
-    // int hr = hrInput;
-    if (gReserveSbp > 0 && ageInput == gReserveAge) {
-      sbp = gLastSbp;
-      if (hr > gLastHr) {
-        sbp = (sbp + (hr - gLastHr) * hrBpRate).toInt();
-        gLastSbp = (gReserveSbp + sbp + gLastSbp) ~/ 3;
-        sbp -= _random.nextInt(4);
+    final random = Random();
+
+    if (g_reserve_sbp > 0 && age == g_reserve_age) {
+      sbp = g_last_sbp;
+      if (hr > g_last_hr) {
+        sbp = (sbp + (hr - g_last_hr) * HR_BP_RATE).toInt();
+        g_last_sbp = ((g_reserve_sbp + sbp + g_last_sbp)/ 3).toInt();
+        sbp -= (random.nextDouble() * 4.0).toInt();
       }
-      gLastHr = hr;
+      g_last_hr = hr;
     } else {
       int index = 0;
-      for (int i = 0; i < CalcBloodPressureByHeart.age.length; i++) {
-        if (ageInput < CalcBloodPressureByHeart.age[i]) {
+      for (int i = 0; i < AGE.length; i++) {
+        if (age < AGE[i]) {
           index = i;
           break;
         }
       }
-      sbp = minSbp + _random.nextInt(maxSbp - minSbp + 1);
-      sbp += ageBpCof[index];
-      gReserveSbp = sbp;
-      if (hr < hrLower) {
-        sbp = (sbp - (hrLower - hr) * hrBpRate).toInt();
+      sbp = MIN_SBP + (random.nextDouble() * (MAX_SBP - MIN_SBP + 1)).toInt();
+      sbp += AGE_BP_COF[index];
+      g_reserve_sbp = sbp;
+      if (hr < HR_LOWER) {
+        sbp = (sbp - (HR_LOWER - hr) * HR_BP_RATE).toInt();
       } else {
-        sbp = (sbp + (hr - hrLower) * hrBpRate).toInt();
+        sbp = (sbp + (hr - HR_LOWER) * HR_BP_RATE).toInt();
       }
-      sbp = (gReserveSbp + sbp) ~/ 2;
-      gLastSbp = sbp;
-      gLastHr = hr;
-      gReserveAge = ageInput;
+      sbp = ((g_reserve_sbp + sbp)/ 2).toInt();
+      g_last_sbp = sbp;
+      g_last_hr = hr;
+      g_reserve_age = age;
     }
     return sbp;
   }
 
-  static int calDbp(int sbp) {
-    return sbp - minBpDiff + _random.nextInt(maxBpDiff - minBpDiff);
+  static int cal_dbp(int sbp) {
+    final random = Random();
+    return sbp - MIN_BP_DIFF +
+        (random.nextDouble() * (MAX_BP_DIFF - MIN_BP_DIFF)).toInt();
   }
 }

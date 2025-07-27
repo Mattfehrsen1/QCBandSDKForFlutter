@@ -1060,6 +1060,13 @@ class _DeviceScreenState extends State<DeviceScreen> {
   // }
 
   getBloodPressureDevice() async {
+    // Example for Parsing the data
+    int userAge = 29;
+    // List<int> encodedBloodPressure = [77];
+    // BloodPressureBle parser = BloodPressureBle();
+    // var result = parser.parseData(encodedBloodPressure, userAge);
+    // log('This is the Response of the Blood Pressure $result');
+
     // Instantiate your response parser class
     // final ReadBlePressureRsp pressureResponseParser = ReadBlePressureRsp();
 
@@ -1106,14 +1113,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
           }
           log('Encoded Blood Pressure: $encodedBloodPressure');
           BloodPressureBle parser = BloodPressureBle();
-          var result = parser.parseData(encodedBloodPressure);
+          var result = parser.parseData(encodedBloodPressure, userAge);
           log('This is the Response of the Blood Pressure $result');
+          encodedBloodPressure = [];
+        } else if (value.isNotEmpty) {
+          log('No Blood Pressure Record Found all are synchronized');
         }
       },
     );
-    // if (encodedBloodPressure.isNotEmpty) {
-
-    // }
   }
 
   @override
