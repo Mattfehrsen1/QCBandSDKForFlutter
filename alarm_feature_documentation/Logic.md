@@ -42,3 +42,36 @@ Created two alarms to check if the value changes Recieved from the provider app
 [188, 44, 10, 0, 206, 229, 1, 2, 4, 190, 78, 2, 4, 255, 149, 2]
 Created two alarms to check if the value changes Recieved from the flutter app command. 
  [188, 44, 1, 0, 62, 129, 2]
+ ----
+ Found the Option in iOS side in the 
+ /**
+ *  Get the wristband alarm clock
+ *
+ *  获取手环闹钟
+ */
++ (void)getBandAlarmsWithFinish:(void(^)(NSArray <QCAlarmModel*>* _Nullable,NSError * _Nullable))finished;
+
+/**
+ *  Set the wristband alarm clock
+ *
+ *  设置手环闹钟
+ */
++ (void)setBandAlarms:(NSArray <QCAlarmModel*>*)alarms finish:(void(^)(NSArray * _Nullable,NSError * _Nullable))finished;
+
+
+/**
+ *
+ *  Period reminder function setting: send the setting to the wristband
+ *
+ *  经期提醒功能设置：发送设置到手环
+ *
+ * @param open                                   :Switch 1=on, 0 off, 2=invalid (when the APP reads the configuration from the wristband, if this bit is 2, the wristband parameter is invalid)
+ * @param durationday                   :Menstrual period duration, in days; (default 6 days)
+ * @param intervalday                   :Menstrual cycle, unit day; (default 28 days)
+ * @param startday                          :How many days ago was the last start, 0=starts today; (default 0 means, APP does not display)
+ * @param endday                              :How many days ago was the last end, 0=end today; (the default value of 0 means that the APP does not display) (when endday is not equal to startday+durationday, it means that the user manually modified the end time)
+ * @param remindOpen                    :Reminder switch 1=on, others off; (default off)
+ * @param beforemenstrday         :How many days in advance to remind the menstrual period, 1 = one day in advance. 1~3. (default 2)
+ * @param beforeovulateday      :How many days in advance to remind the ovulation period, 1~3. (default 2)
+ * @param hour                                 :Reminder time point-Hour
+ * @param minute                            :Reminder time point - minutes
