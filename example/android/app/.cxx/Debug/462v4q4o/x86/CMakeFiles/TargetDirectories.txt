@@ -1,0 +1,2 @@
+/Users/matthewfehrsen/Desktop/Shahryar working demo app - flutter/example/android/app/.cxx/Debug/462v4q4o/x86/CMakeFiles/edit_cache.dir
+/Users/matthewfehrsen/Desktop/Shahryar working demo app - flutter/example/android/app/.cxx/Debug/462v4q4o/x86/CMakeFiles/rebuild_cache.dir
