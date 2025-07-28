@@ -21,7 +21,7 @@
 #import <QCBandSDK/QCStressModel.h>
 #import <QCBandSDK/QCSedentaryModel.h>
 #import <QCBandSDK/QCBloodPressureModel.h> // Import your QCBloodPressureModel header
-
+#import <QCBandSDK/QCAlarmModel.h>
 typedef NS_ENUM(NSInteger, QCFeatureType) {
     QCFeatureTypeAlertBinding = 0,              //Bind Notification(绑定通知)
     QCFeatureTypeSetTime,                       //Set Watch Time(设置手表时间)
@@ -345,32 +345,32 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
     //         // This block will be executed if the data retrieval fails
     //         NSLog(@"Failed to retrieve blood pressure data.");
     //     }];
-  NSInteger currentUserAge = 18; // Replace with the actual user's age
-////    
-////    // 2. Call the SDK function
-    [QCSDKCmdCreator getSchedualBPHistoryDataWithUserAge:currentUserAge
-                                                 success:^(NSArray<QCBloodPressureModel *> *data) {
-        // This block is executed if the data retrieval is successful
-        NSLog(@"Successfully retrieved %lu blood pressure records.", (unsigned long)data.count);
-        
-        if (data.count > 0) {
-            for (QCBloodPressureModel *bpModel in data) {
-                // Process each BloodPressureModel object
-                NSLog(@"BP Record: Systolic=%ld, Diastolic=%ld, Timestamp=%@",
-                      (long)bpModel.systolicPressure, (long)bpModel.diastolicPressure, bpModel.date);
-                
-                // You can now use this data to display in your UI, save to a database, etc.
-                // Example: Update a UITableView or UICollectionView
-            }
-        } else {
-            NSLog(@"No blood pressure data found for user age %ld.", (long)currentUserAge);
-        }
-        
-    } fail:^{
-        // This block is executed if the data retrieval fails
-        NSLog(@"Failed to retrieve blood pressure data.");
-        // Inform the user about the failure (e.g., show an alert)
-    }];
+//  NSInteger currentUserAge = 18; // Replace with the actual user's age
+//////    
+//////    // 2. Call the SDK function
+//    [QCSDKCmdCreator getSchedualBPHistoryDataWithUserAge:currentUserAge
+//                                                 success:^(NSArray<QCBloodPressureModel *> *data) {
+//        // This block is executed if the data retrieval is successful
+//        NSLog(@"Successfully retrieved %lu blood pressure records.", (unsigned long)data.count);
+//        
+//        if (data.count > 0) {
+//            for (QCBloodPressureModel *bpModel in data) {
+//                // Process each BloodPressureModel object
+//                NSLog(@"BP Record: Systolic=%ld, Diastolic=%ld, Timestamp=%@",
+//                      (long)bpModel.systolicPressure, (long)bpModel.diastolicPressure, bpModel.date);
+//                
+//                // You can now use this data to display in your UI, save to a database, etc.
+//                // Example: Update a UITableView or UICollectionView
+//            }
+//        } else {
+//            NSLog(@"No blood pressure data found for user age %ld.", (long)currentUserAge);
+//        }
+//        
+//    } fail:^{
+//        // This block is executed if the data retrieval fails
+//        NSLog(@"Failed to retrieve blood pressure data.");
+//        // Inform the user about the failure (e.g., show an alert)
+//    }];
     
 //        BOOL enableMeasurement = YES; // Set to YES to turn the timed measurement ON, NO to turn it OFF
 //         NSString *startTime = @"00:00"; // Measurement starts at 8:00 AM
@@ -479,6 +479,31 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
 //        NSLog(@"Failed to get blood pressure data. Please check connection or permissions.");
 //        // Implement error handling here (e.g., show an alert to the user).
 //    }];
+    [QCSDKCmdCreator getBandAlarmsWithFinish:^(NSArray<QCAlarmModel *> * _Nullable alarms, NSError * _Nullable error) {
+         if (error) {
+             NSLog(@"Failed to get wristband alarms: %@", error.localizedDescription);
+             // Handle the error (e.g., show an alert to the user)
+         } else {
+             if (alarms && alarms.count > 0) {
+                 NSLog(@"Successfully retrieved %lu alarms:", (unsigned long)alarms.count);
+                 for (QCAlarmModel *alarm in alarms) {
+                    
+                     NSInteger hour = alarm.time / 60;
+                                      NSInteger minute = alarm.time % 60;
+
+                                      NSLog(@"Alarm: Name='%@', Time=%02ld:%02ld, Type=%ld, RepeatDays=%@",
+                                            alarm.name,
+                                            (long)hour,
+                                            (long)minute,
+                                            (long)alarm.type,
+                                            alarm.weekDays); // weekDays is already an array of strings
+                 }
+             } else {
+                 NSLog(@"No alarms found on the wristband or successfully retrieved an empty list.");
+                 // Handle the case where no alarms are set
+             }
+         }
+     }];
 }
 - (void)getSleepFromDay {
     NSLog(@"Get sleep data");

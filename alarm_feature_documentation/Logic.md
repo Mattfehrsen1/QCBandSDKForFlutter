@@ -50,7 +50,33 @@ Created two alarms to check if the value changes Recieved from the flutter app c
  *  获取手环闹钟
  */
 + (void)getBandAlarmsWithFinish:(void(^)(NSArray <QCAlarmModel*>* _Nullable,NSError * _Nullable))finished;
-
+2025-07-28 20:16:03.008281+0500 QCBandSDKDemo[691:45103] [QCLog] Phone >>>> Band:{length = 7, bytes = 0xbc2c01007e8001}
+2025-07-28 20:16:03.182748+0500 QCBandSDKDemo[691:45103] [QCLog] Band >>>> Phone:{length = 16, bytes = 0xbc2c0a00cee5010204be4e0204ff9502}
+2025-07-28 20:16:03.183587+0500 QCBandSDKDemo[691:45103] Successfully retrieved 2 alarms:
+2025-07-28 20:16:03.184012+0500 QCBandSDKDemo[691:45103] Alarm: Name='(null)', Time=09:50, Type=1, RepeatDays=(
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0
+)
+2025-07-28 20:16:03.184411+0500 QCBandSDKDemo[691:45103] Alarm: Name='(null)', Time=11:01, Type=1, RepeatDays=(
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+)
+2025-07-28 20:16:15.710161+0500 QCBandSDKDemo[691:45103] [QCLog] Band >>>> Phone:{length = 16, bytes = 0x02020000000000000000000000000004}
+2025-07-28 20:16:15.710873+0500 QCBandSDKDemo[691:45103] [QCLog] 拍照数据状态:2
+2025-07-28 20:16:15.711156+0500 QCBandSDKDemo[691:45103] Click on the watch to take a photo
+2025-07-28 20:16:27.262457+0500 QCBandSDKDemo[691:45103] [QCLog] Band >>>> Phone:{length = 16, bytes = 0x02020000000000000000000000000004}
+2025-07-28 20:16:27.263027+0500 QCBandSDKDemo[691:45103] [QCLog] 拍照数据状态:2
+2025-07-28 20:16:27.263301+0500 QCBandSDKDemo[691:45103] Click on the watch to take a photo
 /**
  *  Set the wristband alarm clock
  *
