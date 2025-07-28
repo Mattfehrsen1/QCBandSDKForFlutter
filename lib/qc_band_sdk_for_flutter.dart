@@ -805,10 +805,19 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
-    static Uint8List getAlarms() {
+
+  static Uint8List getAlarms() {
+    // 188,44
+    // [188, 42, 1, 0, 255, 0, 255]
+
     final List<int> value = _generateInitValue();
-    value[0] = 36;
-    value[1] = 1;
+    value[0] = 188;
+    value[1] = 36;
+    value[2] = 0;
+    // value[3] = 0;
+    // value[4] = 255;
+    // value[5] = 0;
+    // value[6] = 255;
     _crcValue(value);
     return Uint8List.fromList(value);
   }

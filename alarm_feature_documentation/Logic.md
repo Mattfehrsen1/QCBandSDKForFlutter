@@ -11,3 +11,34 @@ Found these two
 [188, 44, 6, 0, 232, 151, 1, 1, 4, 62, 78, 2]
 and for sendimentory which I think is 
 [38, 8, 0, 32, 0, 127, 60, 0, 0, 0, 0, 0, 0, 0, 0, 9]. So, theory is correct that 38 is the command Id of the sendimentory alarm and [ 188,44 ] is the command of the alarms. 
+Things to Remember the [38, 8, 0, 32, 0, 127, 60, 0, 0, 0, 0, 0, 0, 0, 0, 9] is using the characteristic_uuid: 6e400003-b5a3-f393-e0a9-e50e24dcca9e
+and 
+[188, 44, 6, 0, 232, 151, 1, 1, 4, 62, 78, 2] is using de5bf729-d711-4e47-af26-65e3012a5dc7
+Running this command 
+[188, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232]
+Returns 
+[188, 44, 1, 0, 62, 129, 2] -> Disection needed. 
+Running this command 
+[188, 44, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 233]
+Returns 
+[188, 44, 1, 0, 62, 129, 2] -> Disection needed. 
+Running this command 
+[188, 44, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 233]
+Returns 
+[188, 44, 1, 0, 62, 129, 2] -> Disection needed. 
+Running this command 
+[188, 44, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 233]
+Returns 
+[188, 44, 1, 0, 62, 129, 2] -> Disection needed. 
+--
+So, the response when changing the value[2] to 0,1,2 is the same so, it means Documentation of the get Alarms is completely wrong. Also response from the provider app is 
+[188, 44, 6, 0, 232, 151, 1, 1, 4, 62, 78, 2]
+but my response is 
+[188, 44, 1, 0, 62, 129, 2] Might be the issue with the command. Write the value[3] to 6 and check the reponse. No same response. 
+Left Check the iOS sdk to check whether they have the alarm set Options.
+When on the alarm of 9:50 this  is response [38, 8, 0, 32, 0, 127, 60, 0, 0, 0, 0, 0, 0, 0, 0, 9]
+--
+Created two alarms to check if the value changes Recieved from the provider app
+[188, 44, 10, 0, 206, 229, 1, 2, 4, 190, 78, 2, 4, 255, 149, 2]
+Created two alarms to check if the value changes Recieved from the flutter app command. 
+ [188, 44, 1, 0, 62, 129, 2]
