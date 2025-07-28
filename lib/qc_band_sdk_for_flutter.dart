@@ -805,6 +805,13 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+    static Uint8List getAlarms() {
+    final List<int> value = _generateInitValue();
+    value[0] = 36;
+    value[1] = 1;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {

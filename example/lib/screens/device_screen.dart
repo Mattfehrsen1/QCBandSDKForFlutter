@@ -1174,6 +1174,26 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
+  getAlarms() async {
+    final List<int> command = QCBandSDK.getAlarms();
+    try {
+      await _secondbluetoothCharacteristicWrite!.write(
+        command,
+      );
+    } catch (e) {
+      print("Error sending pressure request: $e");
+    }
+    _secondbluetoothCharacteristicNotification.value.listen((value) {
+      // Handle the received value (List<int>)
+      print('Received notification: $value');
+      if (value.isNotEmpty) {
+        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
+        // print(recievedHRVData);
+        log('Received Alarms : $value}');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -1346,25 +1366,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 child: Text('Set Time'),
               ),
               TextButton(
-                onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
-                  // sleepDetailData();
-                  // Parse Response
-                },
+                onPressed: getAlarms,
                 child: Text('Get Alarm'),
               ),
               TextButton(
-                onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  // TODO: // Working Need Work on Parsing
-                  // sleepDetailData();
-                  // Parse Response
-                },
+                onPressed: () {},
                 child: Text('Set Alarm'),
               ),
               TextButton(
