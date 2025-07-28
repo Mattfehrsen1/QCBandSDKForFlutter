@@ -479,31 +479,72 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
 //        NSLog(@"Failed to get blood pressure data. Please check connection or permissions.");
 //        // Implement error handling here (e.g., show an alert to the user).
 //    }];
-    [QCSDKCmdCreator getBandAlarmsWithFinish:^(NSArray<QCAlarmModel *> * _Nullable alarms, NSError * _Nullable error) {
-         if (error) {
-             NSLog(@"Failed to get wristband alarms: %@", error.localizedDescription);
-             // Handle the error (e.g., show an alert to the user)
-         } else {
-             if (alarms && alarms.count > 0) {
-                 NSLog(@"Successfully retrieved %lu alarms:", (unsigned long)alarms.count);
-                 for (QCAlarmModel *alarm in alarms) {
-                    
-                     NSInteger hour = alarm.time / 60;
-                                      NSInteger minute = alarm.time % 60;
+//    [QCSDKCmdCreator getBandAlarmsWithFinish:^(NSArray<QCAlarmModel *> * _Nullable alarms, NSError * _Nullable error) {
+//         if (error) {
+//             NSLog(@"Failed to get wristband alarms: %@", error.localizedDescription);
+//             // Handle the error (e.g., show an alert to the user)
+//         } else {
+//             if (alarms && alarms.count > 0) {
+//                 NSLog(@"Successfully retrieved %lu alarms:", (unsigned long)alarms.count);
+//                 for (QCAlarmModel *alarm in alarms) {
+//                    
+//                     NSInteger hour = alarm.time / 60;
+//                                      NSInteger minute = alarm.time % 60;
+//
+//                                      NSLog(@"Alarm: Name='%@', Time=%02ld:%02ld, Type=%ld, RepeatDays=%@",
+//                                            alarm.name,
+//                                            (long)hour,
+//                                            (long)minute,
+//                                            (long)alarm.type,
+//                                            alarm.weekDays); // weekDays is already an array of strings
+//                 }
+//             } else {
+//                 NSLog(@"No alarms found on the wristband or successfully retrieved an empty list.");
+//                 // Handle the case where no alarms are set
+//             }
+//         }
+//     }];
+    QCAlarmModel *wakeUpAlarm = [[QCAlarmModel alloc] init];
+        wakeUpAlarm.name = @"Wake Up";
+        // Convert 7:00 AM to minutes from midnight: 7 * 60 = 420
+        wakeUpAlarm.time = 7 * 60;
+        // Assuming ALARMTYPE_GENERAL is a defined enum value in OdmBleConstants.h
+        wakeUpAlarm.type = 1; // Replace with actual ALARMTYPE enum value
 
-                                      NSLog(@"Alarm: Name='%@', Time=%02ld:%02ld, Type=%ld, RepeatDays=%@",
-                                            alarm.name,
-                                            (long)hour,
-                                            (long)minute,
-                                            (long)alarm.type,
-                                            alarm.weekDays); // weekDays is already an array of strings
-                 }
-             } else {
-                 NSLog(@"No alarms found on the wristband or successfully retrieved an empty list.");
-                 // Handle the case where no alarms are set
-             }
-         }
-     }];
+        // Weekdays: Sunday=0, Monday=1, ..., Saturday=6
+        // So, Monday to Friday would be indices 1, 2, 3, 4, 5.
+        // The weekDays array expects strings "0" or "1" for each day.
+        // Let's assume weekDays is ordered from Sunday to Saturday.
+        // Example: @[@"0", @"1", @"1", @"1", @"1", @"1", @"0"] for Mon-Fri
+        wakeUpAlarm.weekDays = @[@"0", @"1", @"1", @"1", @"1", @"1", @"0"]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+
+        // --- 2. Create the second alarm: Weekend (Sat-Sun at 10:00 AM) ---
+        QCAlarmModel *weekendAlarm = [[QCAlarmModel alloc] init];
+        weekendAlarm.name = @"Weekend";
+        // Convert 10:00 AM to minutes from midnight: 10 * 60 = 600
+        weekendAlarm.time = 10 * 60;
+        weekendAlarm.type = 2; // Or another appropriate ALARMTYPE
+
+        // Weekend: Sunday=0, Saturday=6
+        weekendAlarm.weekDays = @[@"1", @"0", @"0", @"0", @"0", @"0", @"1"]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+
+        // --- 3. Build the array of alarms ---
+        NSArray<QCAlarmModel *> *alarmsToSet = @[wakeUpAlarm];
+
+        // --- 4. Call setBandAlarms ---
+        [QCSDKCmdCreator setBandAlarms:alarmsToSet finish:^(NSArray * _Nullable successfullySetAlarms, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"Failed to set wristband alarms: %@", error.localizedDescription);
+                // Handle the error (e.g., show an alert to the user)
+            } else {
+                if (successfullySetAlarms) {
+                    NSLog(@"Successfully set alarms. Confirmed alarms: %@", successfullySetAlarms);
+                    // You might want to update your UI to reflect the new alarm state
+                } else {
+                    NSLog(@"Alarms sent, but no confirmation array returned or it was empty.");
+                }
+            }
+        }];
 }
 - (void)getSleepFromDay {
     NSLog(@"Get sleep data");

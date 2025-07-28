@@ -101,3 +101,9 @@ Created two alarms to check if the value changes Recieved from the flutter app c
  * @param beforeovulateday      :How many days in advance to remind the ovulation period, 1~3. (default 2)
  * @param hour                                 :Reminder time point-Hour
  * @param minute                            :Reminder time point - minutes
+ 7:00 AM to minutes
+ 2025-07-28 20:25:48.719735+0500 QCBandSDKDemo[709:49451] [QCLog] Phone >>>> Band:{length = 19, bytes = 0xbc2c0d009b6802010bbea40157616b65205570}
+2025-07-28 20:25:48.777635+0500 QCBandSDKDemo[709:49451] [QCLog] Band >>>> Phone:{length = 7, bytes = 0xbc2c01003e8102}
+2025-07-28 20:25:48.778802+0500 QCBandSDKDemo[709:49451] Successfully set alarms. Confirmed alarms: (
+    "<QCAlarmModel: 0x281c90db0>"
+)
