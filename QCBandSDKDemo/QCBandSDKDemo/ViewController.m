@@ -529,7 +529,7 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
         weekendAlarm.weekDays = @[@"1", @"0", @"0", @"0", @"0", @"0", @"1"]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
 
         // --- 3. Build the array of alarms ---
-        NSArray<QCAlarmModel *> *alarmsToSet = @[wakeUpAlarm];
+    NSArray<QCAlarmModel *> *alarmsToSet = @[ wakeUpAlarm,weekendAlarm];
 
         // --- 4. Call setBandAlarms ---
         [QCSDKCmdCreator setBandAlarms:alarmsToSet finish:^(NSArray * _Nullable successfullySetAlarms, NSError * _Nullable error) {

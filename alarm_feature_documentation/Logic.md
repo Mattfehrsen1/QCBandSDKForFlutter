@@ -107,3 +107,16 @@ Created two alarms to check if the value changes Recieved from the flutter app c
 2025-07-28 20:25:48.778802+0500 QCBandSDKDemo[709:49451] Successfully set alarms. Confirmed alarms: (
     "<QCAlarmModel: 0x281c90db0>"
 )
+2025-07-28 20:38:43.654792+0500 QCBandSDKDemo[485:8675] [QCLog] Phone >>>> Band:{length = 19, bytes = 0xbc2c0d00d02502010bc158025765656b656e64}
+2025-07-28 20:38:43.715417+0500 QCBandSDKDemo[485:8675] [QCLog] Band >>>> Phone:{length = 7, bytes = 0xbc2c01003e8102}
+2025-07-28 20:38:43.716289+0500 QCBandSDKDemo[485:8675] Successfully set alarms. Confirmed alarms: (
+    "<QCAlarmModel: 0x2813a1380>"
+)
+
+2025-07-28 20:40:09.616698+0500 QCBandSDKDemo[495:10001] [QCLog] Phone >>>> Band:{length = 30, bytes = 0xbc2c1800 27d80202 0bbea401 57616b65 ... 02576565 6b656e64 }
+2025-07-28 20:40:09.690353+0500 QCBandSDKDemo[495:10001] [QCLog] Band >>>> Phone:{length = 7, bytes = 0xbc2c01003e8102}
+2025-07-28 20:40:09.691168+0500 QCBandSDKDemo[495:10001] Successfully set alarms. Confirmed alarms: (
+    "<QCAlarmModel: 0x2835ec600>",
+    "<QCAlarmModel: 0x2835ec2a0>"
+)
+2025-07-28 20:40:15.089972+0500 QCBandSDKDemo[495:10001] [QCLog] Band >>>> Phone:{length = 16, bytes = 0x73010000000000000000000000000074}
