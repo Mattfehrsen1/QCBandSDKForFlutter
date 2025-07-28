@@ -1,0 +1,1092 @@
+package com.oudmon.ble.base.communication;
+
+import android.util.Log;
+import com.oudmon.ble.base.bluetooth.BleOperateManager;
+import com.oudmon.ble.base.communication.req.BaseReqCmd;
+import com.oudmon.ble.base.communication.rsp.BaseRspCmd;
+import com.oudmon.ble.base.request.BaseRequest;
+import com.oudmon.ble.base.request.LocalWriteRequest;
+import com.oudmon.ble.base.request.ReadRequest;
+import com.oudmon.ble.base.util.DataTransferUtils;
+
+public class CommandHandle {
+  private static final String TAG = "CommandHandle";
+  
+  private static CommandHandle odmHandle;
+  
+  public static CommandHandle getInstance() {
+    if (odmHandle == null)
+      synchronized (CommandHandle.class) {
+        if (odmHandle == null)
+          odmHandle = new CommandHandle(); 
+      }  
+    return odmHandle;
+  }
+  
+  private <T extends BaseRspCmd> LocalWriteRequest<T> getWriteRequest(byte[] data) {
+    LocalWriteRequest<T> writeRequest = new LocalWriteRequest(Constants.UUID_SERVICE, Constants.UUID_WRITE);
+    Log.i("qcBleSdk", "app->device+ DataTransferUtils.getHexString(data));
+    writeRequest.setValue(data);
+    return writeRequest;
+  }
+  
+  public ReadRequest getReadHwRequest() {
+    return new ReadRequest(Constants.SERVICE_DEVICE_INFO, Constants.CHAR_HW_REVISION);
+  }
+  
+  public ReadRequest getReadFmRequest() {
+    return new ReadRequest(Constants.SERVICE_DEVICE_INFO, Constants.CHAR_FIRMWARE_REVISION);
+  }
+  
+  public void executeReqCmd(BaseReqCmd reqCmd, ICommandResponse iOpResponse) {
+    if (!BleOperateManager.getInstance().isConnected())
+      return; 
+    LocalWriteRequest<BaseRspCmd> localWriteRequest = getWriteRequest(reqCmd.getData());
+    int notifyKey = localWriteRequest.getValue()[0] & (Constants.FLAG_MASK_ERROR ^ 0xFFFFFFFF);
+    localWriteRequest.setiOpResponse(iOpResponse);
+    if (iOpResponse != null)
+      BleOperateManager.getInstance().getLocalWriteRequestConcurrentHashMap().put(Integer.valueOf(notifyKey), localWriteRequest); 
+    BleOperateManager.getInstance().execute((BaseRequest)localWriteRequest);
+  }
+  
+  public void executeReqCmdNoCallback(BaseReqCmd reqCmd) {
+    if (!BleOperateManager.getInstance().isConnected())
+      return; 
+    LocalWriteRequest<BaseRspCmd> localWriteRequest = getWriteRequest(reqCmd.getData());
+    BleOperateManager.getInstance().execute((BaseRequest)localWriteRequest);
+  }
+  
+  public void execReadCmd(ReadRequest reqCmd) {
+    BleOperateManager.getInstance().execute((BaseRequest)reqCmd);
+  }
+}
+package com.oudmon.ble.base.communication.req;
+
+public class PhoneSportReq extends MixtureReq {
+  private PhoneSportReq() {
+    super((byte)119);
+  }
+  
+  public static PhoneSportReq getSportStatus(final byte status, final byte sportType) {
+    return new PhoneSportReq() {
+      
+      };
+  }
+}
+package com.oudmon.ble.base.communication;
+
+public interface ICommandResponse<T extends com.oudmon.ble.base.communication.rsp.BaseRspCmd> {
+  void onDataResponse(T paramT);
+}
+package com.oudmon.ble.base.communication.rsp;
+
+import com.oudmon.ble.base.communication.utils.ByteUtil;
+import java.util.Arrays;
+
+public class AppSportRsp extends BaseRspCmd {
+  private int gpsStatus;
+  
+  private int timeStamp = 0;
+  
+  public boolean acceptData(byte[] data) {
+    this.gpsStatus = data[0];
+    if (this.gpsStatus == 6)
+      this.timeStamp = ByteUtil.bytesToInt(Arrays.copyOfRange(data, 2, 6)); 
+    return false;
+  }
+  
+  public int getTimeStamp() {
+    return this.timeStamp;
+  }
+  
+  public int getGpsStatus() {
+    return this.gpsStatus;
+  }
+}
+package com.oudmon.ble.base.bluetooth;
+
+import android.app.Application;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Parcelable;
+import android.text.TextUtils;
+import android.util.Log;
+import android.util.SparseArray;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import com.oudmon.ble.base.bluetooth.spp.MyBumblebeeCallback;
+import com.oudmon.ble.base.bluetooth.spp.RtkMusicSpp;
+import com.oudmon.ble.base.bluetooth.spp.RtkSppConstants;
+import com.oudmon.ble.base.bluetooth.spp.bean.MyDeviceInfo;
+import com.oudmon.ble.base.communication.CommandHandle;
+import com.oudmon.ble.base.communication.Constants;
+import com.oudmon.ble.base.communication.ICommandResponse;
+import com.oudmon.ble.base.communication.req.AppRevisionReq;
+import com.oudmon.ble.base.communication.req.AppRevisionResp;
+import com.oudmon.ble.base.communication.req.BaseReqCmd;
+import com.oudmon.ble.base.communication.req.BindAncsReq;
+import com.oudmon.ble.base.communication.req.SetTimeReq;
+import com.oudmon.ble.base.communication.req.StartHeartRateReq;
+import com.oudmon.ble.base.communication.req.StopHeartRateReq;
+import com.oudmon.ble.base.communication.responseImpl.DeviceNotifyListener;
+import com.oudmon.ble.base.communication.responseImpl.DeviceSportNotifyListener;
+import com.oudmon.ble.base.communication.responseImpl.InnerCameraNotifyListener;
+import com.oudmon.ble.base.communication.responseImpl.PackageLengthListener;
+import com.oudmon.ble.base.communication.rsp.BaseRspCmd;
+import com.oudmon.ble.base.communication.rsp.CameraNotifyRsp;
+import com.oudmon.ble.base.communication.rsp.StartCalcDataRsp;
+import com.oudmon.ble.base.communication.rsp.StartHeartRateRsp;
+import com.oudmon.ble.base.communication.rsp.StopHeartRateRsp;
+import com.oudmon.ble.base.request.BaseRequest;
+import com.oudmon.ble.base.request.EnableNotifyRequest;
+import com.oudmon.ble.base.request.LocalWriteRequest;
+import com.oudmon.ble.base.scan.BleScannerHelper;
+import com.oudmon.ble.base.util.BluetoothUtils;
+import com.realsil.customer.audioconnect.localplayback.LocalPlaybackModelClient;
+import com.realsil.customer.bbpro.BeeProManager;
+import com.realsil.customer.bbpro.BeeProParams;
+import com.realsil.customer.bbpro.BumblebeeCallback;
+import com.realsil.customer.bbpro.ConnectionParameters;
+import com.realsil.customer.bbpro.internal.ModelClient;
+import com.realsil.customer.bbpro.model.DeviceInfo;
+import com.realsil.customer.core.RtkConfigure;
+import com.realsil.customer.core.RtkCore;
+import java.util.Calendar;
+import java.util.Iterator;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class BleOperateManager extends HandlerThread implements IBleListener {
+  private static final String TAG = "BleOperateManager";
+  
+  private static BleOperateManager bleOperateManager = null;
+  
+  private final Handler mainThreadHandler = new Handler(Looper.getMainLooper());
+  
+  private final Handler myHandler = new Handler(Looper.getMainLooper());
+  
+  private Handler workThreadHandler;
+  
+  private final Object mLock = new Object();
+  
+  private boolean mRequestCompleted = false;
+  
+  private final Context mContext;
+  
+  private ConcurrentHashMap<Integer, LocalWriteRequest> localWriteRequestConcurrentHashMap = new ConcurrentHashMap<>();
+  
+  private SparseArray<ICommandResponse> notifySparseArray = new SparseArray();
+  
+  private InnerCameraNotifyListener innerCameraNotifyListener;
+  
+  private OnGattEventCallback callback;
+  
+  private String reConnectMac;
+  
+  private DeviceNotifyListener deviceNotifyListener = new DeviceNotifyListener();
+  
+  private DeviceSportNotifyListener deviceSportNotifyListener = new DeviceSportNotifyListener();
+  
+  private MyBumblebeeCallback mySppCallback;
+  
+  private Application application;
+  
+  ICommandResponse<StartHeartRateRsp> response;
+  
+  ICommandResponse<StartCalcDataRsp> calcResponse;
+  
+  Runnable runnable;
+  
+  Runnable runnableEnable;
+  
+  private BumblebeeCallback sppCallback;
+  
+  public byte heartValue;
+  
+  public byte sbp;
+  
+  public byte dbp;
+  
+  public byte spo2;
+  
+  public byte pressure;
+  
+  public byte hrv;
+  
+  Runnable heartRunnable;
+  
+  Runnable bpRunnable;
+  
+  Runnable spo2Runnable;
+  
+  Runnable pressureRunnable;
+  
+  Runnable hrvRunnable;
+  
+  ICommandResponse<StopHeartRateRsp> ringCallback;
+  
+  private OneKeyResp oneKeyCallback;
+  
+  private int lastFatigueValue;
+  
+  private int lastFatigueTime;
+  
+  public static BleOperateManager getInstance(Application application) {
+    if (bleOperateManager == null)
+      synchronized (BleOperateManager.class) {
+        if (bleOperateManager == null)
+          bleOperateManager = new BleOperateManager(application); 
+      }  
+    return bleOperateManager;
+  }
+  
+  public void setApplication(Application application) {
+    this.application = application;
+  }
+  
+  public String getReConnectMac() {
+    return this.reConnectMac;
+  }
+  
+  public void setReConnectMac(String reConnectMac) {
+    this.reConnectMac = reConnectMac;
+  }
+  
+  public void setCallback(OnGattEventCallback callback) {
+    this.callback = callback;
+  }
+  
+  public static BleOperateManager getInstance() {
+    return bleOperateManager;
+  }
+  
+  private BleOperateManager(Application context) {
+    super("BleOperateManager");
+    this.runnable = new Runnable() {
+        public void run() {
+          BleOperateManager.this.mRequestCompleted = true;
+          BleOperateManager.this.notifyLock();
+        }
+      };
+    this.runnableEnable = new Runnable() {
+        public void run() {
+          BleOperateManager.this.mRequestCompleted = true;
+          BleOperateManager.this.notifyLock();
+          BleOperateManager.this.enableUUID();
+        }
+      };
+    this.sppCallback = new BumblebeeCallback() {
+        public void onStateChanged(int i) {
+          super.onStateChanged(i);
+          if (BleOperateManager.this.mySppCallback != null) {
+            int state = BeeProManager.getInstance((Context)BleOperateManager.this.application).getState();
+            BleOperateManager.this.mySppCallback.onStateChanged(state);
+          } 
+        }
+        
+        public void onServiceConnectionStateChanged(boolean b) {
+          super.onServiceConnectionStateChanged(b);
+          if (BleOperateManager.this.mySppCallback != null)
+            BleOperateManager.this.mySppCallback.onServiceConnectionStateChanged(b); 
+        }
+        
+        public void onConnectionStateChanged(BluetoothDevice bluetoothDevice, int i, int i1) {
+          super.onConnectionStateChanged(bluetoothDevice, i, i1);
+          if (BleOperateManager.this.mySppCallback != null)
+            BleOperateManager.this.mySppCallback.onConnectionStateChanged(bluetoothDevice, i, i1); 
+        }
+        
+        public void onDeviceInfoChanged(DeviceInfo deviceInfo, int i) {
+          super.onDeviceInfoChanged(deviceInfo, i);
+          if (BleOperateManager.this.mySppCallback != null)
+            BleOperateManager.this.mySppCallback.onDeviceInfoChanged((MyDeviceInfo)deviceInfo, i); 
+        }
+        
+        public void onAckReceived(int i, byte b) {
+          super.onAckReceived(i, b);
+          if (BleOperateManager.this.mySppCallback != null)
+            BleOperateManager.this.mySppCallback.onAckReceived(i, b); 
+        }
+        
+        public void onEventReported(int i, byte[] bytes) {
+          super.onEventReported(i, bytes);
+          if (BleOperateManager.this.mySppCallback != null)
+            BleOperateManager.this.mySppCallback.onEventReported(i, bytes); 
+        }
+      };
+    this.heartValue = 85;
+    this.sbp = 80;
+    this.dbp = 120;
+    this.spo2 = 99;
+    this.pressure = 42;
+    this.hrv = -104;
+    this.heartRunnable = new Runnable() {
+        public void run() {
+          if (BleOperateManager.this.response != null) {
+            StartHeartRateRsp resp = new StartHeartRateRsp();
+            resp.setErrCode((byte)0);
+            resp.setValue(BleOperateManager.this.heartValue);
+            BleOperateManager.this.response.onDataResponse((BaseRspCmd)resp);
+          } 
+          CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StopHeartRateReq.stopHeartRate(BleOperateManager.this.heartValue), null);
+        }
+      };
+    this.bpRunnable = new Runnable() {
+        public void run() {
+          if (BleOperateManager.this.response != null) {
+            StartHeartRateRsp resp = new StartHeartRateRsp();
+            resp.setErrCode((byte)0);
+            resp.setSbp(BleOperateManager.this.sbp);
+            resp.setDbp(BleOperateManager.this.dbp);
+            BleOperateManager.this.response.onDataResponse((BaseRspCmd)resp);
+          } 
+          CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StopHeartRateReq.stopBloodPressure(BleOperateManager.this.sbp, BleOperateManager.this.dbp), null);
+        }
+      };
+    this.spo2Runnable = new Runnable() {
+        public void run() {
+          if (BleOperateManager.this.response != null) {
+            StartHeartRateRsp resp = new StartHeartRateRsp();
+            resp.setErrCode((byte)0);
+            resp.setValue(BleOperateManager.this.spo2);
+            BleOperateManager.this.response.onDataResponse((BaseRspCmd)resp);
+          } 
+          CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StopHeartRateReq.stopBloodOxygen(BleOperateManager.this.spo2), null);
+        }
+      };
+    this.pressureRunnable = new Runnable() {
+        public void run() {
+          if (BleOperateManager.this.response != null) {
+            StartHeartRateRsp resp = new StartHeartRateRsp();
+            resp.setErrCode((byte)0);
+            resp.setValue(BleOperateManager.this.pressure);
+            BleOperateManager.this.response.onDataResponse((BaseRspCmd)resp);
+          } 
+          CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StopHeartRateReq.stopPressure(BleOperateManager.this.pressure), null);
+        }
+      };
+    this.hrvRunnable = new Runnable() {
+        public void run() {
+          if (BleOperateManager.this.response != null) {
+            StartHeartRateRsp resp = new StartHeartRateRsp();
+            resp.setErrCode((byte)0);
+            resp.setValue(BleOperateManager.this.hrv);
+            BleOperateManager.this.response.onDataResponse((BaseRspCmd)resp);
+          } 
+          CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StopHeartRateReq.stopHrv(BleOperateManager.this.hrv), null);
+        }
+      };
+    this.ringCallback = new ICommandResponse<StopHeartRateRsp>() {
+        public void onDataResponse(StopHeartRateRsp resultEntity) {
+          if (resultEntity.getErrCode() == 0 && resultEntity.getType() == 2) {
+            if (resultEntity.getSbp() > 0) {
+              BleOperateManager.this.sbp = resultEntity.getSbp();
+              BleOperateManager.this.dbp = resultEntity.getDbp();
+            } 
+          } else if (resultEntity.getErrCode() != 0) {
+            StartHeartRateRsp resp = new StartHeartRateRsp();
+            resp.setErrCode(resultEntity.getErrCode());
+            BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.bpRunnable);
+          } 
+        }
+      };
+    this.oneKeyCallback = new OneKeyResp();
+    this.spo2Array = new int[] { 96, 97, 98, 99 };
+    this.timeout = new Runnable() {
+        public void run() {
+          CommandHandle.getInstance().executeReqCmdNoCallback(
+              (BaseReqCmd)AppRevisionReq.getWriteInstance(2));
+          BleOperateManager.this.ringAppRevisionCallback.onDataResponse((BaseRspCmd)new AppRevisionResp(3));
+        }
+      };
+    this.mContext = (Context)context;
+    this.application = context;
+    BleBaseControl.getInstance((Context)context).setListener(this);
+    this.innerCameraNotifyListener = new InnerCameraNotifyListener((Context)context);
+    this.notifySparseArray.put(47, new PackageLengthListener());
+    this.notifySparseArray.put(115, this.deviceNotifyListener);
+    this.notifySparseArray.put(120, this.deviceSportNotifyListener);
+    start();
+    this.workThreadHandler = new Handler(getLooper());
+  }
+  
+  public ConcurrentHashMap<Integer, LocalWriteRequest> getLocalWriteRequestConcurrentHashMap() {
+    return this.localWriteRequestConcurrentHashMap;
+  }
+  
+  public void addSportDeviceListener(int type, ICommandResponse outRspIOdmOpResponse) {
+    this.deviceSportNotifyListener.setOutRspIOdmOpResponse(type, outRspIOdmOpResponse);
+  }
+  
+  public void removeSportDeviceListener(int key) {
+    this.deviceSportNotifyListener.removeCallback(key);
+  }
+  
+  public void setBluetoothTurnOff(boolean onOrOff) {
+    BleBaseControl.getInstance().setBluetoothTurnOff(onOrOff);
+  }
+  
+  public void addOutCameraListener(ICommandResponse<CameraNotifyRsp> outRspIOdmOpResponse) {
+    this.innerCameraNotifyListener.setOutRspIOdmOpResponse(outRspIOdmOpResponse);
+  }
+  
+  public void removeOutCameraListener() {
+    this.innerCameraNotifyListener.setOutRspIOdmOpResponse(null);
+  }
+  
+  public boolean addNotifyListener(int key, ICommandResponse iOpResponse) {
+    if (iOpResponse == null)
+      return false; 
+    this.notifySparseArray.put(key, iOpResponse);
+    return true;
+  }
+  
+  public void removeNotifyListener(int key) {
+    this.notifySparseArray.delete(key);
+  }
+  
+  public SparseArray<ICommandResponse> getNotifySparseArray() {
+    return this.notifySparseArray;
+  }
+  
+  public void unBindDevice() {
+    setNeedConnect(false);
+    BleBaseControl.getInstance().unBondedDevice(BleBaseControl.getInstance().getmDeviceAddress());
+    BleScannerHelper.getInstance().removeSystemBle();
+    disconnect();
+    setMacNull();
+  }
+  
+  public void setMacNull() {
+    BleBaseControl.getInstance().setmDeviceAddress(null);
+  }
+  
+  public void connectDirectly(String macAddress) {
+    BleBaseControl.getInstance().connect(macAddress);
+  }
+  
+  public void connectWithScan(String macAddress) {
+    if (TextUtils.isEmpty(macAddress)) {
+      Log.i("qcBleSdk", "mac );
+      return;
+    } 
+    if (TextUtils.isEmpty(this.reConnectMac)) {
+      Log.i("qcBleSdk", "mac );
+      return;
+    } 
+    BleBaseControl.getInstance().setNeedReconnect(true);
+    BleBaseControl.getInstance().setmDeviceAddress(macAddress);
+    BleBaseControl.getInstance().reconnectOpeningUp();
+  }
+  
+  public void disconnect() {
+    Log.i("qcBleSdk", "disconnect...");
+    BleBaseControl.getInstance().disconnectDevice(BleBaseControl.getInstance().getmDeviceAddress());
+  }
+  
+  public void setNeedConnect(boolean needConnect) {
+    BleBaseControl.getInstance().setNeedReconnect(needConnect);
+  }
+  
+  public boolean execute(final BaseRequest baseCharAction) {
+    if (!BluetoothUtils.isEnabledBluetooth(this.mContext)) {
+      Log.e("BleOperateManager", "connectDirectly: );
+      return false;
+    } 
+    if (!BleBaseControl.getInstance().ismIsConnected())
+      return false; 
+    this.workThreadHandler.postDelayed(this.runnable, 5000L);
+    this.workThreadHandler.post(new Runnable() {
+          public void run() {
+            synchronized (BleOperateManager.this.mLock) {
+              try {
+                if (baseCharAction.needInitCharacteristic()) {
+                  BluetoothGattCharacteristic charCharacteristic = BleBaseControl.getInstance().findTheGattCharacteristic(baseCharAction.getServiceUuid(), baseCharAction.getCharUuid());
+                  if (charCharacteristic == null)
+                    return; 
+                  boolean result = baseCharAction.execute(BleBaseControl.getInstance().getGatt(BleBaseControl.getInstance().getmDeviceAddress()), charCharacteristic);
+                  if (!result)
+                    BleOperateManager.this.notifyLock(); 
+                } else {
+                  boolean result = baseCharAction.execute(BleBaseControl.getInstance().getGatt(BleBaseControl.getInstance().getmDeviceAddress()), null);
+                  if (!result)
+                    BleOperateManager.this.notifyLock(); 
+                } 
+                BleOperateManager.this.mRequestCompleted = false;
+                if (BleBaseControl.getInstance().ismIsConnected())
+                  BleOperateManager.this.waitUntilActionResponse(); 
+              } catch (Exception e) {
+                e.printStackTrace();
+              } 
+            } 
+          }
+        });
+    return true;
+  }
+  
+  private void waitUntilActionResponse() {
+    try {
+      while (!this.mRequestCompleted)
+        this.mLock.wait(); 
+    } catch (Exception e) {
+      Log.e("BleOperateManager", "Sleeping interrupted", e);
+    } 
+  }
+  
+  protected void notifyLock() {
+    this.workThreadHandler.removeCallbacks(this.runnable);
+    synchronized (this.mLock) {
+      this.mRequestCompleted = true;
+      this.mLock.notifyAll();
+    } 
+  }
+  
+  public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+    notifyLock();
+  }
+  
+  public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+    notifyLock();
+  }
+  
+  public boolean isConnected() {
+    return BleBaseControl.getInstance().ismIsConnected();
+  }
+  
+  public void onReadRemoteRssi(BluetoothGatt gatt, int rssi, int status) {
+    notifyLock();
+  }
+  
+  public void startConnect() {
+    Intent intent = new Intent("com.qc.sdk.ble.start_connect");
+    mySendBroadcast(intent);
+  }
+  
+  public void bleGattConnected(BluetoothDevice device) {
+    Intent intent = new Intent("com.qc.sdk.ble.gatt_connected");
+    intent.putExtra("DEVICE", (Parcelable)device);
+    intent.putExtra("ADDRESS", device.getAddress());
+    mySendBroadcast(intent);
+  }
+  
+  public void bleGattDisconnect(BluetoothDevice device) {
+    Intent intent = new Intent("com.qc.sdk.ble.gatt_disconnected");
+    intent.putExtra("DEVICE", (Parcelable)device);
+    intent.putExtra("ADDRESS", device.getAddress());
+    mySendBroadcast(intent);
+    synchronized (this.mLock) {
+      this.localWriteRequestConcurrentHashMap.clear();
+      notifyLock();
+    } 
+  }
+  
+  public void bleServiceDiscovered(int state, final String address) {
+    enableUUID();
+    this.mainThreadHandler.postDelayed(new Runnable() {
+          public void run() {
+            Intent intent = new Intent("com.qc.sdk.ble.service_discovered");
+            intent.putExtra("ADDRESS", address);
+            BleOperateManager.this.mySendBroadcast(intent);
+          }
+        }1000L);
+    this.mainThreadHandler.postDelayed(new Runnable() {
+          public void run() {
+            BleOperateManager.this.runCommonCmd();
+          }
+        },  3000L);
+  }
+  
+  public void bleCharacteristicRead(String address, String uuid, int status, byte[] value) {
+    Intent intent = new Intent("com.qc.sdk.ble.characteristic_read");
+    intent.putExtra("ADDRESS", address);
+    intent.putExtra("CHARACTER_UUID", uuid);
+    intent.putExtra("STATUS", status);
+    intent.putExtra("VALUE", value);
+    mySendBroadcast(intent);
+    notifyLock();
+  }
+  
+  public void bleCharacteristicNotification() {
+    Intent intent = new Intent("com.qc.sdk.ble.characteristic_notification_qc");
+    mySendBroadcast(intent);
+    notifyLock();
+  }
+  
+  public void bleCharacteristicWrite(String address, String uuid, int status, byte[] data) {
+    Intent intent = new Intent("com.qc.characteristic_write_qc");
+    intent.putExtra("ADDRESS", address);
+    intent.putExtra("CHARACTER_UUID", uuid);
+    intent.putExtra("STATUS", status);
+    intent.putExtra("DATA", data);
+    mySendBroadcast(intent);
+    notifyLock();
+  }
+  
+  public void bleCharacteristicChanged(String address, String uuid, byte[] value) {
+    Intent intent = new Intent("com.qc.characteristic_changed_qc");
+    intent.putExtra("ADDRESS", address);
+    intent.putExtra("CHARACTER_UUID", uuid);
+    intent.putExtra("VALUE", value);
+    mySendBroadcast(intent);
+    if (this.callback != null)
+      this.callback.onReceivedData(uuid, value); 
+  }
+  
+  public void bleNoCallback() {
+    Intent intent = new Intent("com.qc.sdk.ble.BLE_NO_CALLBACK");
+    mySendBroadcast(intent);
+  }
+  
+  private void mySendBroadcast(Intent intent) {
+    LocalBroadcastManager.getInstance(this.mContext).sendBroadcast(intent);
+  }
+  
+  private void enableUUID() {
+    this.mainThreadHandler.removeCallbacks(this.runnableEnable);
+    this.mainThreadHandler.postDelayed(this.runnableEnable, 4000L);
+    EnableNotifyRequest enableNotifyRequest = new EnableNotifyRequest(Constants.UUID_SERVICE, Constants.UUID_READ, new EnableNotifyRequest.ListenerCallback() {
+          public void enable(boolean result) {
+            BleOperateManager.this.mainThreadHandler.removeCallbacks(BleOperateManager.this.runnableEnable);
+          }
+        });
+    enableNotifyRequest.setEnable(true);
+    getInstance().execute((BaseRequest)enableNotifyRequest);
+  }
+  
+  public void init() {
+    IntentFilter intentFilter = BleAction.getIntentFilter();
+    QCBluetoothCallbackReceiver bluetoothDataParseReceiver = new QCBluetoothCallbackReceiver();
+    LocalBroadcastManager.getInstance(this.mContext).registerReceiver(bluetoothDataParseReceiver, intentFilter);
+    QCBluetoothCallbackCloneReceiver cloneReceiver = new QCBluetoothCallbackCloneReceiver();
+    LocalBroadcastManager.getInstance(this.mContext).registerReceiver(cloneReceiver, intentFilter);
+    QCBluetoothCallbackBigDataCloneReceiver bigDataClone = new QCBluetoothCallbackBigDataCloneReceiver();
+    LocalBroadcastManager.getInstance(this.mContext).registerReceiver(bigDataClone, intentFilter);
+  }
+  
+  private void runCommonCmd() {
+    CommandHandle.getInstance().execReadCmd(CommandHandle.getInstance().getReadHwRequest());
+    CommandHandle.getInstance().execReadCmd(CommandHandle.getInstance().getReadFmRequest());
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)new SetTimeReq(1), null);
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)new BindAncsReq(), null);
+  }
+  
+  public void classicBluetoothStartScan() {
+    BleBaseControl.getInstance().classicBluetoothScan();
+  }
+  
+  public void classicBluetoothStopScan() {
+    BleBaseControl.getInstance().cancelScanBluetooth();
+  }
+  
+  public void createBondBlueTooth(BluetoothDevice device) {
+    BleBaseControl.getInstance().createBondBlueTooth(device);
+  }
+  
+  public void createBondBluetoothJieLi(BluetoothDevice device) {
+    BleBaseControl.getInstance().createBond(device, 1);
+  }
+  
+  public void initRTKSPP(Application application) {
+    RtkConfigure configure = (new RtkConfigure.Builder()).debugEnabled(true).printLog(true).logTag("AudioConnect").globalLogLevel(1).build();
+    RtkCore.initialize((Context)application, configure);
+    RtkCore.VDBG = true;
+    BeeProParams.Builder builder = (new BeeProParams.Builder()).syncDataWhenConnected(true).connectA2dp(true).listenHfp(true).uuid(RtkSppConstants.sppUUID).transport(1);
+    BeeProManager.getInstance((Context)application).initialize(builder.build());
+    LocalPlaybackModelClient.initialize((Context)application);
+    BeeProManager.getInstance((Context)application).registerModel((ModelClient)LocalPlaybackModelClient.getInstance());
+  }
+  
+  public void connectRtkSPP(BluetoothDevice bluetoothDevice) {
+    RtkMusicSpp.getInstance().initModelClient();
+    ConnectionParameters params = (new ConnectionParameters.Builder(bluetoothDevice)).uuid(RtkSppConstants.sppUUID).transport(1).build();
+    int beeError = BeeProManager.getInstance((Context)this.application).startConnect(params);
+    BeeProManager.getInstance((Context)this.application).addManagerCallback(this.sppCallback);
+    if (beeError != 0);
+  }
+  
+  public void disconnectSpp() {
+    int beeError = (BeeProManager.getInstance((Context)this.application).disconnect()).code;
+  }
+  
+  public BluetoothDevice getCurDevice() {
+    return BeeProManager.getInstance((Context)this.application).getCurDevice();
+  }
+  
+  public int getConnectState() {
+    return BeeProManager.getInstance((Context)this.application).getConnectState();
+  }
+  
+  public void registerSppCallback(MyBumblebeeCallback callback) {
+    this.mySppCallback = callback;
+  }
+  
+  public void removeSppCallback() {
+    this.mySppCallback = null;
+  }
+  
+  public void disconnectRtkSPP() {
+    BeeProManager.getInstance((Context)this.application).disconnect();
+    BeeProManager.getInstance((Context)this.application).destroy();
+  }
+  
+  public void setRtkBindTag(Boolean rtkBindTag) {
+    BleBaseControl.getInstance().setRtkBindTag(rtkBindTag);
+  }
+  
+  public void manualModeHeart(final ICommandResponse<StartHeartRateRsp> response) {
+    this.response = response;
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StartHeartRateReq.getSimpleReq((byte)1), new ICommandResponse<StopHeartRateRsp>() {
+          public void onDataResponse(StopHeartRateRsp resultEntity) {
+            if (resultEntity.getErrCode() == 0 && resultEntity.getType() == 1) {
+              if (resultEntity.getValue() > 0)
+                BleOperateManager.this.heartValue = resultEntity.getValue(); 
+            } else {
+              BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.heartRunnable);
+              if (resultEntity.getErrCode() != 0) {
+                BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.heartRunnable);
+                StartHeartRateRsp resp = new StartHeartRateRsp();
+                resp.setErrCode(resultEntity.getErrCode());
+                if (response != null)
+                  response.onDataResponse((BaseRspCmd)resp); 
+              } 
+            } 
+          }
+        });
+    this.myHandler.removeCallbacks(this.heartRunnable);
+    this.myHandler.postDelayed(this.heartRunnable, 30000L);
+  }
+  
+  public void manualModeBP(ICommandResponse<StartHeartRateRsp> response) {
+    this.response = response;
+    this.myHandler.removeCallbacks(this.bpRunnable);
+    this.myHandler.postDelayed(this.bpRunnable, 30000L);
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StartHeartRateReq.getSimpleReq((byte)2), new ICommandResponse<StopHeartRateRsp>() {
+          public void onDataResponse(StopHeartRateRsp resultEntity) {
+            if (resultEntity.getStatus() == 0 && resultEntity.getType() == 2) {
+              if (resultEntity.getSbp() > 0) {
+                BleOperateManager.this.sbp = resultEntity.getSbp();
+                BleOperateManager.this.dbp = resultEntity.getDbp();
+              } 
+            } else if (resultEntity.getErrCode() != 0) {
+              StartHeartRateRsp resp = new StartHeartRateRsp();
+              resp.setErrCode(resultEntity.getErrCode());
+              BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.bpRunnable);
+            } 
+          }
+        });
+  }
+  
+  public void manualModeSpO2(final ICommandResponse<StartHeartRateRsp> response) {
+    this.response = response;
+    this.myHandler.removeCallbacks(this.spo2Runnable);
+    this.myHandler.postDelayed(this.spo2Runnable, 30000L);
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StartHeartRateReq.getSimpleReq((byte)3), new ICommandResponse<StopHeartRateRsp>() {
+          public void onDataResponse(StopHeartRateRsp resultEntity) {
+            if (resultEntity.getErrCode() == 0 && resultEntity.getType() == 3) {
+              BleOperateManager.this.spo2 = (byte)((new Random()).nextInt(4) + 96);
+            } else if (resultEntity.getErrCode() != 0) {
+              BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.spo2Runnable);
+              StartHeartRateRsp resp = new StartHeartRateRsp();
+              resp.setErrCode(resultEntity.getErrCode());
+              if (response != null)
+                response.onDataResponse((BaseRspCmd)resp); 
+            } 
+          }
+        });
+  }
+  
+  public void manualModePressure(final ICommandResponse<StartHeartRateRsp> response) {
+    this.response = response;
+    this.myHandler.removeCallbacks(this.pressureRunnable);
+    this.myHandler.postDelayed(this.pressureRunnable, 30000L);
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StartHeartRateReq.getSimpleReq((byte)8), new ICommandResponse<StopHeartRateRsp>() {
+          public void onDataResponse(StopHeartRateRsp resultEntity) {
+            if (resultEntity.getErrCode() == 0 && resultEntity.getType() == 8) {
+              if (resultEntity.getValue() > 50) {
+                BleOperateManager.this.pressure = (byte)((new Random()).nextInt(20) + 30);
+              } else {
+                BleOperateManager.this.pressure = resultEntity.getValue();
+              } 
+            } else if (resultEntity.getErrCode() != 0) {
+              BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.pressureRunnable);
+              StartHeartRateRsp resp = new StartHeartRateRsp();
+              resp.setErrCode(resultEntity.getErrCode());
+              if (response != null)
+                response.onDataResponse((BaseRspCmd)resp); 
+            } 
+          }
+        });
+  }
+  
+  public void manualModeHrv(final ICommandResponse<StartHeartRateRsp> response) {
+    this.response = response;
+    this.myHandler.removeCallbacks(this.hrvRunnable);
+    this.myHandler.postDelayed(this.hrvRunnable, 31000L);
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StartHeartRateReq.getSimpleReq((byte)10), new ICommandResponse<StopHeartRateRsp>() {
+          public void onDataResponse(StopHeartRateRsp resultEntity) {
+            if (resultEntity.getErrCode() == 0 && resultEntity.getType() == 10) {
+              if (BleOperateManager.this.hrv > 0)
+                BleOperateManager.this.hrv = resultEntity.getValue(); 
+            } else if (resultEntity.getErrCode() != 0) {
+              BleOperateManager.this.myHandler.removeCallbacks(BleOperateManager.this.hrvRunnable);
+              StartHeartRateRsp resp = new StartHeartRateRsp();
+              resp.setErrCode(resultEntity.getErrCode());
+              if (response != null)
+                response.onDataResponse((BaseRspCmd)resp); 
+            } 
+          }
+        });
+  }
+  
+  public ICommandResponse<StartHeartRateRsp> getResponse() {
+    return this.response;
+  }
+  
+  public void setResponse(ICommandResponse<StartHeartRateRsp> response) {
+    this.response = response;
+  }
+  
+  public void startOneKey(int lastFatigueValue, int lastFatigueTime, ICommandResponse<StartCalcDataRsp> callback) {
+    this.lastFatigueTime = lastFatigueTime;
+    this.lastFatigueValue = lastFatigueValue;
+    this.calcResponse = callback;
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StartHeartRateReq.getSimpleReq((byte)5), this.oneKeyCallback);
+    getInstance().addNotifyListener(105, this.oneKeyCallback);
+  }
+  
+  public void endOneKey() {
+    CommandHandle.getInstance().executeReqCmd((BaseReqCmd)StopHeartRateReq.stopHealthCheck(), this.oneKeyCallback);
+    getInstance().removeNotifyListener(105);
+  }
+  
+  private class OneKeyResp implements ICommandResponse<StartHeartRateRsp> {
+    private OneKeyResp() {}
+    
+    public void onDataResponse(StartHeartRateRsp resultEntity) {
+      if (BleOperateManager.this.calcResponse != null) {
+        StartCalcDataRsp calcDataRsp = new StartCalcDataRsp();
+        calcDataRsp.setHeart(resultEntity.getValue());
+        calcDataRsp.setSbp(resultEntity.getSbp());
+        calcDataRsp.setDbp(resultEntity.getDbp());
+        calcDataRsp.setSpo2(BleOperateManager.this.calcSpo2());
+        calcDataRsp.setScore(BleOperateManager.this.calcScore());
+        calcDataRsp.setType(resultEntity.getType());
+        calcDataRsp.setErrCode(resultEntity.getErrCode());
+        calcDataRsp.setFatigue(BleOperateManager.createFatigueValue(BleOperateManager.this.lastFatigueValue, BleOperateManager.this.lastFatigueTime));
+        BleOperateManager.this.calcResponse.onDataResponse((BaseRspCmd)calcDataRsp);
+      } 
+    }
+  }
+  
+  private static Random mRandom = new Random();
+  
+  private int[] spo2Array;
+  
+  ICommandResponse<AppRevisionResp> ringAppRevisionCallback;
+  
+  Runnable timeout;
+  
+  private int calcSpo2() {
+    return this.spo2Array[(new Random()).nextInt(4)];
+  }
+  
+  private int calcScore() {
+    return (new Random()).nextInt(4) + 96;
+  }
+  
+  public static int createFatigueValue(int lastFatigueValue, int lastFatigueTime) {
+    Calendar mCalendar = Calendar.getInstance();
+    int hour = mCalendar.get(11);
+    long currentTime = System.currentTimeMillis();
+    long dTime = currentTime - lastFatigueTime;
+    Log.i("BleOperateManager", "createFatigueValue.. hour: " + hour + ", dTime: " + dTime + ", lastFatigueValue: " + lastFatigueValue);
+    if (dTime > 1800000L)
+      if (hour >= 5 && hour < 11) {
+        lastFatigueValue = 80 + mRandom.nextInt(20);
+      } else if (hour >= 22 || hour < 5) {
+        lastFatigueValue = 40 + mRandom.nextInt(20);
+      } else if (hour >= 12 && hour < 14) {
+        lastFatigueValue = (mRandom.nextInt(10) < 7) ? (40 + mRandom.nextInt(20)) : (80 + mRandom.nextInt(20));
+      } else {
+        lastFatigueValue = mRandom.nextBoolean() ? (40 + mRandom.nextInt(20)) : (80 + mRandom.nextInt(20));
+      }  
+    return lastFatigueValue;
+  }
+  
+  public void addOutDeviceListener(int type, ICommandResponse outRspIOdmOpResponse) {
+    this.deviceNotifyListener.setOutRspIOdmOpResponse(type, outRspIOdmOpResponse);
+  }
+  
+  public void removeOutDeviceListener(int key) {
+    this.deviceNotifyListener.removeCallback(key);
+  }
+  
+  public void removeOthersListener() {
+    this.deviceNotifyListener.removeOtherCallbacks();
+  }
+  
+  public void ringCalibration(boolean enable, final ICommandResponse<AppRevisionResp> callback) {
+    this.ringAppRevisionCallback = callback;
+    final boolean[] psData = { false };
+    final boolean[] bioData = { false };
+    this.myHandler.removeCallbacks(this.timeout);
+    if (!enable) {
+      CommandHandle.getInstance().executeReqCmdNoCallback(
+          (BaseReqCmd)AppRevisionReq.getWriteInstance(2));
+      getInstance().removeNotifyListener(-223);
+      return;
+    } 
+    this.myHandler.postDelayed(this.timeout, 120000L);
+    getInstance().addNotifyListener(-223, new ICommandResponse<AppRevisionResp>() {
+          public void onDataResponse(AppRevisionResp resultEntity) {
+            if (resultEntity.getDataType() == 1 && resultEntity.getResult() == 1)
+              psData[0] = true; 
+            if (resultEntity.getDataType() == 2 && resultEntity.getResult() == 1)
+              bioData[0] = true; 
+            if (psData[0] && bioData[0]) {
+              callback.onDataResponse((BaseRspCmd)new AppRevisionResp(1));
+            } else {
+              callback.onDataResponse((BaseRspCmd)new AppRevisionResp(2));
+            } 
+          }
+        });
+    if (enable)
+      CommandHandle.getInstance().executeReqCmdNoCallback(
+          (BaseReqCmd)AppRevisionReq.getWriteInstance(6)); 
+  }
+  
+  public void bleCreateBond() {
+    BleBaseControl.getInstance().bleCreateBond();
+  }
+  
+  public BluetoothDevice getMacSystemBond(String address) {
+    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+    Set<BluetoothDevice> devices1 = adapter.getBondedDevices();
+    if (devices1.size() > 0)
+      for (Iterator<BluetoothDevice> iterator = devices1.iterator(); iterator.hasNext(); ) {
+        BluetoothDevice bluetoothDevice = iterator.next();
+        if (bluetoothDevice == null || bluetoothDevice.getName() == null || bluetoothDevice.getAddress() == null)
+          continue; 
+        if (!TextUtils.isEmpty(address) && 
+          address.equalsIgnoreCase(bluetoothDevice.getAddress()))
+          return bluetoothDevice; 
+      }  
+    return null;
+  }
+}
+package com.oudmon.ble.base.communication.responseImpl;
+
+import com.oudmon.ble.base.communication.ICommandResponse;
+import com.oudmon.ble.base.communication.rsp.BaseRspCmd;
+import com.oudmon.ble.base.communication.rsp.DeviceNotifyRsp;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class DeviceNotifyListener implements ICommandResponse<DeviceNotifyRsp> {
+  private ConcurrentHashMap<Integer, ICommandResponse<DeviceNotifyRsp>> respList = new ConcurrentHashMap<>();
+  
+  public void setOutRspIOdmOpResponse(int key, ICommandResponse<DeviceNotifyRsp> outRspIOdmOpResponse) {
+    this.respList.put(Integer.valueOf(key), outRspIOdmOpResponse);
+    if (this.respList.get(Integer.valueOf(100)) != null)
+      removeOtherCallbacks(); 
+  }
+  
+  public void removeCallback(int key) {
+    this.respList.remove(Integer.valueOf(key));
+  }
+  
+  public void removeOtherCallbacks() {
+    this.respList.remove(Integer.valueOf(1));
+    this.respList.remove(Integer.valueOf(2));
+    this.respList.remove(Integer.valueOf(3));
+    this.respList.remove(Integer.valueOf(5));
+    this.respList.remove(Integer.valueOf(7));
+  }
+  
+  public void onDataResponse(DeviceNotifyRsp resultEntity) {
+    for (ICommandResponse<DeviceNotifyRsp> outRspIOdmOpResponse : this.respList.values())
+      outRspIOdmOpResponse.onDataResponse((BaseRspCmd)resultEntity); 
+  }
+}
+package com.oudmon.ble.base.communication.rsp;
+
+public class DeviceNotifyRsp extends BaseRspCmd {
+  private int dataType;
+  
+  private byte[] loadData;
+  
+  public boolean acceptData(byte[] data) {
+    this.dataType = data[0];
+    this.loadData = data;
+    return false;
+  }
+  
+  public int getDataType() {
+    return this.dataType;
+  }
+  
+  public byte[] getLoadData() {
+    return this.loadData;
+  }
+}
+package com.oudmon.ble.base.communication.rsp;
+
+import java.lang.reflect.ParameterizedType;
+
+public abstract class BaseRspCmd {
+  protected static final String TAG = "Jxr35";
+  
+  public static final int RESULT_OK = 0;
+  
+  protected int status;
+  
+  private Class<?> clazz;
+  
+  public abstract boolean acceptData(byte[] paramArrayOfbyte);
+  
+  public int getStatus() {
+    return this.status;
+  }
+  
+  public void setStatus(int status) {
+    this.status = status;
+  }
+  
+  public Class getRealType() {
+    ParameterizedType pt = (ParameterizedType)getClass().getGenericSuperclass();
+    this.clazz = (Class)pt.getActualTypeArguments()[0];
+    return this.clazz;
+  }
+}
+package com.oudmon.ble.base.communication.utils;
+
+public class BLEDataFormatUtils {
+  public static int BCDToDecimal(byte data) {
+    int decade = data >> 4 & 0xF;
+    int unit = data & 0xF;
+    return decade * 10 + unit;
+  }
+  
+  public static byte decimalToBCD(int data) {
+    int unit = data % 10;
+    int decade = data / 10;
+    return (byte)(decade << 4 | unit);
+  }
+  
+  public static int bytes2Int(byte[] data) {
+    int length = data.length;
+    int res = 0;
+    for (int i = 0; i < length; i++)
+      res |= (data[i] & 0xFF) << 8 * (length - 1 - i); 
+    return res;
+  }
+}
+
