@@ -14,6 +14,7 @@ This command is used to request the alarm settings for a specific alarm index fr
 
 * **Example**: To get the alarm at index 1, the command would be `[36, 1]`.
 
+
 #### 2. Set/Edit Alarms Command
 
 This command is used to create a new alarm or modify an existing one on the device.
