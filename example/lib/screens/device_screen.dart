@@ -934,6 +934,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
     if (todayData.isNotEmpty) {
       final parser = SleepParser(todayData, currentIndex: 0);
       print("\nSleep Summary for day 0 (Today): ${parser.getSleepSummary()}");
+      // final convertToGoogleSheetObservationBLEValue
+
     }
 
     // Keep track of the previous day's data for parsing
