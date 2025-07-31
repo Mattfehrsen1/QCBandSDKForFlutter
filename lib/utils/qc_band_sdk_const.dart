@@ -46,6 +46,7 @@ class QcBandSdkConst {
   static const int ACTION_PAUSE = 2;
   static const int ACTION_CONTINUE = 3;
   static const int ACTION_STOP = 4;
+  static const int ACTION_HOLD = 5;  // Keep-alive for continuous measurement
 
   static const String cmdDeviceFunctionSupport = '60';
   static const String cmdDeviceTouch = '59';
