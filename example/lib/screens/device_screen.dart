@@ -927,43 +927,59 @@ class _DeviceScreenState extends State<DeviceScreen> {
   /// This function starts the periodic write operation to the Bluetooth characteristic.
   /// It returns the Timer object, which is crucial for stopping it later.
   Timer _startHeartRatePeriodicWrite() {
-    const intervalDuration = Duration(seconds: 10);
+    const intervalDuration = Duration(seconds: 15);
 
     print(
-        'Scheduling heart rate data write every ${intervalDuration.inSeconds} seconds...');
+        '🚀 Starting auto-hold heart rate system every ${intervalDuration.inSeconds} seconds...');
 
-    // Timer.periodic creates a repeating timer.
-    // The 'await' call for writing data is now inside this periodic callback,
-    // ensuring it happens every 20 seconds.
+    // Send initial START command
+    _bluetoothCharacteristicWrite.write(
+      QCBandSDK.liveHeartData(1), // Initial START command
+    );
+    print('✅ Initial START command sent: [30, 1, ...]');
+
+    // Timer.periodic creates a repeating timer for HOLD commands.
     return Timer.periodic(intervalDuration, (Timer timer) async {
-      print('---');
-      print('Performing periodic heart rate data write at ${DateTime.now()}');
+      print('🔄 AUTO-HOLD TIMER FIRED - sending hold command');
       await _bluetoothCharacteristicWrite.write(
-        QCBandSDK.liveHeartData(1), // This sends the command to the band
+        QCBandSDK.holdLiveHeartRate(), // Send HOLD command [30, 3, ...]
       );
-      print('---');
+      print('✅ AUTO-HOLD SUCCESS: Hold command sent at ${DateTime.now()}');
     });
   }
 
   /// This function stops both the repeating write task and the notification listener.
   void stopHeartHeartRepeating() {
+    print('🛑 Stopping auto-hold heart rate system');
+    
     // Stop the periodic timer if it's active
     if (_heartRateRepeatingTimer != null &&
         _heartRateRepeatingTimer!.isActive) {
       _heartRateRepeatingTimer!.cancel();
       _heartRateRepeatingTimer = null; // Clear the reference after cancelling
-      print('Repeating heart rate data write stopped at ${DateTime.now()}');
+      print('🛑 Auto-hold timer stopped at ${DateTime.now()}');
     } else {
-      print('No active repeating heart rate data write to stop.');
+      print('ℹ️ No active auto-hold timer to stop.');
+    }
+
+    // Send STOP commands to ensure monitoring stops
+    try {
+      _bluetoothCharacteristicWrite.write(QCBandSDK.liveHeartData(4)); // STOP command
+      print('✅ STOP command sent: [30, 4, ...] - Heart rate monitoring should stop now');
+      
+      _bluetoothCharacteristicWrite.write(QCBandSDK.liveHeartData(2)); // END command
+      print('✅ END command sent: [30, 2, ...] - Double ensuring stop');
+    } catch (e) {
+      print('❌ Error sending stop commands: $e');
     }
 
     // Also, stop the notification listener to clean up resources
     if (_heartRateNotificationSubscription != null) {
       _heartRateNotificationSubscription!.cancel();
       _heartRateNotificationSubscription = null; // Clear the reference
-      print('Heart rate notification listener stopped.');
+      print('🛑 Heart rate notification listener stopped.');
     } else {
-      print('No active heart rate notification listener to stop.');
+      print('ℹ️ No active heart rate notification listener to stop.');
     }
   }
 

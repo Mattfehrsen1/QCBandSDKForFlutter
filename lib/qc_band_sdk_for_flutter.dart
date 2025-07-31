@@ -806,6 +806,30 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  /// Hold/Keep-alive command for continuous live heart rate monitoring
+  /// This should be called periodically to maintain the live heart rate stream
+  /// Uses action 3 (iOS SDK Hold command) instead of ACTION_HOLD constant
+  static Uint8List holdLiveHeartRate() {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdGetRealTimeHeartRate;
+    value[1] = 3;  // iOS SDK Hold command value (QCBandRealTimeHeartRateCmdTypeHold)
+    
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  /// Hold/Keep-alive command for continuous workout monitoring
+  /// This maintains the active workout session
+  static Uint8List holdWorkOut() {
+    final List<int> value = _generateInitValue();
+    value[0] = 119;  // Same command as other workout functions
+    value[1] = 3;    // Hold action (similar to heart rate hold)
+    value[2] = 4;    // Sport type (walking by default)
+    
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {
     final List<int> value = [

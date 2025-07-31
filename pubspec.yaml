@@ -1,6 +1,6 @@
 name: qc_band_sdk_for_flutter
-description: "A new Flutter plugin project."
-version: 0.0.1
+description: "QC Band SDK for Flutter with automatic hold commands for continuous heart rate monitoring and workout sessions."
+version: 0.1.0
 homepage:
 
 environment:
