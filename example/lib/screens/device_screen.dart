@@ -48,6 +48,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
   late BluetoothCharacteristic _secondbluetoothCharacteristicNotification;
   // de5bf72a-d711-4e47-af26-65e3012a5dc7
   late BluetoothCharacteristic _secondbluetoothCharacteristicWrite;
+  StreamSubscription<List<int>>? _heartRateNotificationSubscription;
+  Timer? _heartRateRepeatingTimer;
 
   Future<void> _discoverServicesAndCharacteristics(
       BluetoothDevice device) async {
@@ -880,21 +882,89 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   // Step Data of Today
-  liveHeartRate() async {
+  liveHeartRate() {
     // Today
-    await _bluetoothCharacteristicWrite.write(
-      QCBandSDK.liveHeartData(1),
+    // 1. Set up the notification listener ONLY ONCE.
+    // This listens for incoming data from the Bluetooth characteristic.
+    _setupHeartRateNotificationListener();
+
+    // 2. Start the periodic task to write data to the characteristic.
+    // This write operation typically requests the band to send heart rate data.
+    // The returned Timer object is stored in _heartRateRepeatingTimer so it can be cancelled later.
+    _heartRateRepeatingTimer = _startHeartRatePeriodicWrite();
+  }
+
+  void _setupHeartRateNotificationListener() {
+    // If there's an existing subscription, cancel it to prevent multiple listeners
+    if (_heartRateNotificationSubscription != null) {
+      _heartRateNotificationSubscription!.cancel();
+      _heartRateNotificationSubscription = null;
+      print('DEBUG: Cancelled previous heart rate notification subscription.');
+    }
+
+    print('DEBUG: Setting up heart rate notification listener...');
+    _heartRateNotificationSubscription =
+        _bluetoothCharacteristicNotification.value.listen(
+      (value) {
+        // Handle the received value (List<int>)
+        // print('Received notification: $value'); // Uncomment for detailed debug
+        if (value.isNotEmpty &&
+            value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
+          log('Received HRV: ${value[1]}'); // Assuming value[1] is the actual HR value
+        }
+      },
+      onError: (error) {
+        print('ERROR: Heart rate notification stream error: $error');
+      },
+      onDone: () {
+        print('DEBUG: Heart rate notification stream completed.');
+        _heartRateNotificationSubscription =
+            null; // Clear reference when stream closes
+      },
     );
-    _bluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print('Received notification: $value');
-      if (value.isNotEmpty &&
-          value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
-        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
-        // print(recievedHRVData);
-        log('Received HRV: ${value[1]}');
-      }
+  }
+
+  /// This function starts the periodic write operation to the Bluetooth characteristic.
+  /// It returns the Timer object, which is crucial for stopping it later.
+  Timer _startHeartRatePeriodicWrite() {
+    const intervalDuration = Duration(seconds: 10);
+
+    print(
+        'Scheduling heart rate data write every ${intervalDuration.inSeconds} seconds...');
+
+    // Timer.periodic creates a repeating timer.
+    // The 'await' call for writing data is now inside this periodic callback,
+    // ensuring it happens every 20 seconds.
+    return Timer.periodic(intervalDuration, (Timer timer) async {
+      print('---');
+      print('Performing periodic heart rate data write at ${DateTime.now()}');
+      await _bluetoothCharacteristicWrite.write(
+        QCBandSDK.liveHeartData(1), // This sends the command to the band
+      );
+      print('---');
     });
+  }
+
+  /// This function stops both the repeating write task and the notification listener.
+  void stopHeartHeartRepeating() {
+    // Stop the periodic timer if it's active
+    if (_heartRateRepeatingTimer != null &&
+        _heartRateRepeatingTimer!.isActive) {
+      _heartRateRepeatingTimer!.cancel();
+      _heartRateRepeatingTimer = null; // Clear the reference after cancelling
+      print('Repeating heart rate data write stopped at ${DateTime.now()}');
+    } else {
+      print('No active repeating heart rate data write to stop.');
+    }
+
+    // Also, stop the notification listener to clean up resources
+    if (_heartRateNotificationSubscription != null) {
+      _heartRateNotificationSubscription!.cancel();
+      _heartRateNotificationSubscription = null; // Clear the reference
+      print('Heart rate notification listener stopped.');
+    } else {
+      print('No active heart rate notification listener to stop.');
+    }
   }
 
   sleepDetailData() async {
@@ -1282,6 +1352,13 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   // Parse Response
                 },
                 child: Text('Live Heart Rate'),
+              ),
+              TextButton(
+                onPressed: () {
+                  stopHeartHeartRepeating();
+                  // Parse Response
+                },
+                child: Text('Stop Heart Rate'),
               ),
               TextButton(
                 onPressed: () {
