@@ -978,6 +978,19 @@ class _DeviceScreenState extends State<DeviceScreen> {
         if (value.isNotEmpty &&
             value[1] == QcBandSdkConst.getSleepData &&
             !completer.isCompleted) {
+          log("Here is the response of Sleep $value}");
+          // Separate the first 13 elements
+          List<int> firstThirteen = value.sublist(0, 13);
+          List<int> firstSeven = firstThirteen.sublist(0, 7);
+          List<int> lastSix = firstThirteen.sublist(7, 13);
+          
+
+
+          // Log the two new lists
+          log('Here 7 elements: $firstSeven');
+          log('Here 6 elements: $lastSix');
+          // Remove the first 13 elements and log
+
           completer.complete(value);
         }
       });
