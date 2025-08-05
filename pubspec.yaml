@@ -1,6 +1,6 @@
 name: qc_band_sdk_for_flutter
-description: "A new Flutter plugin project."
-version: 0.0.1
+description: "Flutter plugin for QC Band SDK with advanced sleep data analysis, dual-protocol BLE communication, and comprehensive sleep stage processing."
+version: 1.0.0
 homepage:
 
 environment:
