@@ -62,7 +62,7 @@ class _ScanScreenState extends State<ScanScreen> {
       print(e);
     }
     try {
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 30));
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
     } catch (e) {
       Snackbar.show(ABC.b, prettyException("Start Scan Error:", e),
           success: false);
@@ -84,6 +84,9 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   void onConnectPressed(BluetoothDevice device) {
+    // Stop scanning immediately when connecting to a device
+    FlutterBluePlus.stopScan();
+    
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(ABC.c, prettyException("Connect Error:", e),
           success: false);
@@ -96,7 +99,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Future onRefresh() {
     if (_isScanning == false) {
-      FlutterBluePlus.startScan(timeout: const Duration(seconds: 30));
+      FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
     }
     if (mounted) {
       setState(() {});
