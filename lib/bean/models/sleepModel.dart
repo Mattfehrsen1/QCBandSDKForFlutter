@@ -368,6 +368,16 @@ class SleepParser {
       return segments;
     }
 
+    // Verify this is the correct protocol
+    if (_data[0] != 188 || _data[1] != 39) {
+      return segments; // Not a Large Data Protocol packet
+    }
+
+    // SPECIAL CASE: Day 0 uses a completely different packet structure
+    if (currentIndex == 0) {
+      return _parseSingleDayLargeData();
+    }
+
     // Large Data Protocol Multi-Day Structure (0xBC/188, 0x27/39):
     // Byte 0-1: Command + Sub-command (0xBC, 0x27)
     // Byte 2-3: Total packet length (little-endian)
@@ -377,12 +387,7 @@ class SleepParser {
     // Byte 8: dayLength (length of first day's sleep data)
     // Byte 9+: First day's sleep data (start time, end time, segments)
 
-    // Parse multi-day Large Data Protocol packet
-
-    // Verify this is the correct protocol
-    if (_data[0] != 188 || _data[1] != 39) {
-      return segments; // Not a Large Data Protocol packet
-    }
+    // Parse multi-day Large Data Protocol packet (Days 1-6)
 
     // Parse header according to AAR specification
     int totalLength = _data[2] | (_data[3] << 8);  // Little-endian
@@ -529,6 +534,137 @@ class SleepParser {
     }
 
     // Apply official processing pipeline (from LargeDataHandler.java)
+    List<SleepSegment> processedSegments = _applyOfficialProcessingPipeline(segments);
+    return processedSegments;
+  }
+
+  // Parse single-day Large Data Protocol packets (day 0 format)
+  List<SleepSegment> _parseSingleDayLargeData() {
+    List<SleepSegment> segments = [];
+
+    if (_data.length < 8) {
+      // Packet too short for single-day parsing
+      return segments;
+    }
+
+    // Day 0 specific packet structure (identified from analysis):
+    // Bytes 0-1:   Command [188, 39]
+    // Bytes 2-3:   Data length [49, 0]
+    // Bytes 4-7:   Unknown header data [16, 21, 1, 0]
+    // Bytes 8:     Some value [46] (maybe segment count?)
+    // Bytes 9-11:  Sleep start [121, 5] = 1401 minutes = 23:21
+    // Bytes 11-13: Sleep end [203, 1] = 459 minutes = 07:39  
+    // Bytes 13+:   Sleep segments (type-duration pairs)
+    
+    print("🔍 DAY 0 PACKET STRUCTURE (CORRECTED):");
+    print("  Raw packet: ${_data.take(20).toList()}...");
+    print("  Bytes 0-1: Command [${_data[0]}, ${_data[1]}] = [188, 39]");
+    print("  Bytes 2-3: Data length [${_data[2]}, ${_data[3]}] = ${_data[2] | (_data[3] << 8)} bytes");
+    print("  Bytes 4-7: Unknown header [${_data[4]}, ${_data[5]}, ${_data[6]}, ${_data[7]}]");
+    if (_data.length > 8) {
+      print("  Byte 8: Value [${_data[8]}] (possibly segment count)");
+    }
+    
+    // Extract sleep times from correct positions for Day 0
+    int startMinutes, endMinutes;
+    if (_data.length >= 13) {
+      // Bytes 9-10: Sleep start time
+      startMinutes = _data[9] | (_data[10] << 8);
+      // Bytes 11-12: Sleep end time  
+      endMinutes = _data[11] | (_data[12] << 8);
+      
+      print("  Bytes 9-10: Sleep start [${_data[9]}, ${_data[10]}] = $startMinutes minutes = ${(startMinutes ~/ 60).toString().padLeft(2, '0')}:${(startMinutes % 60).toString().padLeft(2, '0')}");
+      print("  Bytes 11-12: Sleep end [${_data[11]}, ${_data[12]}] = $endMinutes minutes = ${(endMinutes ~/ 60).toString().padLeft(2, '0')}:${(endMinutes % 60).toString().padLeft(2, '0')}");
+      
+      print("  ✅ Using Day 0 specific byte positions for time extraction");
+    } else {
+      // Fallback if packet is too short
+      startMinutes = _data[4] | (_data[5] << 8);
+      endMinutes = _data[6] | (_data[7] << 8);
+      print("  ⚠️ Packet too short for Day 0 format, using fallback positions");
+    }
+
+    // Calculate base date for Day 0 sleep session
+    DateTime today = DateTime.now();
+    
+    // For Day 0, use a simple approach since times are correctly extracted
+    // Start time 23:21 (1401 min) should be yesterday evening
+    // End time 07:39 (459 min) should be this morning
+    DateTime sleepStartDate = today.subtract(Duration(days: 1)); // Yesterday for 23:21
+    DateTime sleepEndDate = today; // Today for 07:39
+    
+    DateTime bedTime = DateTime(
+      sleepStartDate.year, 
+      sleepStartDate.month, 
+      sleepStartDate.day
+    ).add(Duration(minutes: startMinutes));
+    
+    DateTime wakeTime = DateTime(
+      sleepEndDate.year, 
+      sleepEndDate.month, 
+      sleepEndDate.day
+    ).add(Duration(minutes: endMinutes));
+    
+    print("  Final times: ${bedTime.hour.toString().padLeft(2, '0')}:${bedTime.minute.toString().padLeft(2, '0')} → ${wakeTime.hour.toString().padLeft(2, '0')}:${wakeTime.minute.toString().padLeft(2, '0')}");
+
+    // Extract sleep segment data starting from byte 13 for Day 0
+    List<int> segmentData = _data.sublist(13);
+    
+    print("  Sleep segment data starting at byte 13 (${segmentData.length} bytes): ${segmentData.take(20).toList()}${segmentData.length > 20 ? '...' : ''}");
+    print("  Calculated bed time: $bedTime");
+    print("  Calculated wake time: $wakeTime");
+    
+    // Parse sleep segments as (type, duration) pairs
+    DateTime currentTime = bedTime;
+    
+    for (int i = 0; i < segmentData.length - 1; i += 2) {
+      int type = segmentData[i];
+      int duration = segmentData[i + 1];
+
+      // Handle negative bytes (convert to unsigned)
+      if (duration < 0) duration = duration & 0xFF;
+
+      DateTime segmentStart = currentTime;
+      DateTime segmentEnd = currentTime.add(Duration(minutes: duration));
+
+      // Map sleep types according to AAR:
+      // Type 3 (deep sleep) → stage 1
+      // Type 2 (light sleep) → stage 2  
+      // Type 5 (awake) → stage 3
+      // Type 4 (REM) → stage 4
+      // Type 0/1 (other) → stage 5
+      int stageType;
+      switch (type) {
+        case 3:
+          stageType = kStageDeep; // 1
+          break;
+        case 2:
+          stageType = kStageShallow; // 2
+          break;
+        case 5:
+          stageType = kStageAwake; // 3
+          break;
+        case 4:
+          stageType = 4; // REM
+          break;
+        default:
+          stageType = kStageUnknown; // 5
+          break;
+      }
+
+      segments.add(SleepSegment(
+        segmentStart: segmentStart,
+        segmentEnd: segmentEnd,
+        stageType: stageType,
+        originalQuality: type, // Store original type as quality
+        timeIndex: i ~/ 2, // Segment index
+        sleepIndex: duration, // Duration in minutes
+      ));
+
+      currentTime = segmentEnd;
+    }
+
+    // Apply official processing pipeline
     List<SleepSegment> processedSegments = _applyOfficialProcessingPipeline(segments);
     return processedSegments;
   }
