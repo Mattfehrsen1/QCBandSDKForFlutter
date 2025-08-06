@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 // Protocol detection
 enum SleepProtocol { standard, largeData }
 
@@ -222,7 +220,7 @@ class SleepParser {
       // Ensure enough elements for header + marker
       markerYesterday = todayList.sublist(7, 7 + 6);
     } else {
-      log("Error: todayList does not contain enough elements for the 6-byte marker after the first 7 bytes.");
+      // Error: todayList does not contain enough elements for the 6-byte marker after the first 7 bytes.
       return {}; // Return empty or handle error appropriately
     }
 
@@ -231,7 +229,7 @@ class SleepParser {
     if (yesterdayList.length >= 13) {
       processableYesterdayList = yesterdayList.sublist(13);
     } else {
-      log("Error: yesterdayList has fewer than 13 elements. Cannot extract sleep data.");
+      // Error: yesterdayList has fewer than 13 elements. Cannot extract sleep data.
       return {}; // Return empty or handle error appropriately
     }
 
@@ -242,7 +240,7 @@ class SleepParser {
     // Assuming the actual sleep data for yesterday is the first chunk after the marker.
     // Adjust this logic if the structure of splitYesterdayData is different.
     if (splitYesterdayData.isEmpty) {
-      log("No sleep data found in yesterday's list after splitting by marker.");
+      // No sleep data found in yesterday's list after splitting by marker.
       return {};
     }
 
@@ -257,7 +255,7 @@ class SleepParser {
             [actualYesterdaySleepData[i], actualYesterdaySleepData[i + 1]]);
       } else {
         // Handle odd number of elements if necessary, or simply ignore the last one
-        log("Warning: Odd number of elements in yesterday's sleep data. Last element ${actualYesterdaySleepData[i]} might be ignored.");
+        // Warning: Odd number of elements in yesterday's sleep data. Last element ${actualYesterdaySleepData[i]} might be ignored.
       }
     }
 
@@ -282,9 +280,7 @@ class SleepParser {
 
     final int totalDuration = lightSum + deepSum + remSum + awakeSum;
 
-    log('Sleep data for today (first 13 removed): ${todayList.sublist(7 + 6)}'); // For debugging, showing actual sleep data part of today
-    log('Marker for yesterday: $markerYesterday');
-    log('Sleep data for yesterday (after split and pairing): $actualYesterdaySleepData');
+    // Sleep data processed successfully
 
     return {
       'totalDuration': totalDuration,
@@ -368,7 +364,7 @@ class SleepParser {
     List<SleepSegment> segments = [];
 
     if (_data.length < 9) {
-      log("Error: Data too short for Large Data Protocol parsing (${_data.length} bytes)");
+      // Error: Data too short for Large Data Protocol parsing
       return segments;
     }
 
@@ -466,7 +462,7 @@ class SleepParser {
           int segmentEndPos = currentPos + dayDataLength;
           if (segmentEndPos <= _data.length) {
             targetDaySegmentData = _data.sublist(segmentStartPos, segmentEndPos);
-            log("📊 Segment data (${targetDaySegmentData.length} bytes): $targetDaySegmentData");
+            // Segment data extracted
           }
         }
         break;
@@ -532,23 +528,8 @@ class SleepParser {
       currentTime = segmentEnd;
     }
 
-    log("✅ Built ${segments.length} raw sleep segments using REAL device timestamps!");
-    
     // Apply official processing pipeline (from LargeDataHandler.java)
     List<SleepSegment> processedSegments = _applyOfficialProcessingPipeline(segments);
-    
-    log("🔄 Official Pipeline: ${segments.length} raw → ${processedSegments.length} processed segments");
-    if (processedSegments.isNotEmpty) {
-      log("🕒 Timeline: ${bedTime.hour.toString().padLeft(2, '0')}:${bedTime.minute.toString().padLeft(2, '0')} → ${processedSegments.last.segmentEnd.hour.toString().padLeft(2, '0')}:${processedSegments.last.segmentEnd.minute.toString().padLeft(2, '0')}");
-      
-      // Validate against expected times for known days
-      if (currentIndex == 4) { // August 1st
-        bool bedTimeMatch = bedTime.hour == 23 && bedTime.minute == 11;
-        bool wakeTimeMatch = wakeTime.hour == 7 && (wakeTime.minute >= 30 && wakeTime.minute <= 40);
-        // Validation for August 1st data complete 
-      }
-    }
-    // Large data protocol parsing complete
     return processedSegments;
   }
 
@@ -596,7 +577,7 @@ class SleepParser {
       // Error parsing Standard Protocol: $e
     }
 
-    log("=== END STANDARD PROTOCOL PARSING ===");
+    // Standard protocol parsing complete
     return segments;
   }
 
@@ -609,7 +590,7 @@ class SleepParser {
     // For now, use current date - could be enhanced to parse from packet
     DateTime today = DateTime.utc(2025, 8, 5);
     today = today.subtract(Duration(days: currentIndex));
-    log("📅 Using calculated date for day $currentIndex: $today");
+          // Using calculated date for day $currentIndex
     return today;
   }
 
@@ -639,10 +620,10 @@ class SleepParser {
         }
       }
       
-      log("📊 Extracted ${pairs.length} time-quality pairs from standard protocol");
+      // Extracted time-quality pairs from standard protocol
       
     } catch (e) {
-      log("❌ Error extracting time-quality pairs: $e");
+      // Error extracting time-quality pairs
     }
     
     return pairs;
@@ -672,7 +653,7 @@ class SleepParser {
       
       sleepEnd = sleepStart.add(Duration(minutes: totalDuration));
       
-      log("🕒 Calculated boundaries: $sleepStart → $sleepEnd (${totalDuration}min)");
+      // Calculated sleep boundaries
     }
     
     if (sleepStart != null && sleepEnd != null) {
@@ -894,12 +875,11 @@ class SleepParser {
       wakeTime = segments.last.segmentEnd;
     }
 
-    log("✅ Final bedTime: $bedTime, wakeTime: $wakeTime");
+    // Final sleep times determined
 
     // Convert to local time for comparison with your expected times
     if (bedTime != null && wakeTime != null) {
-      log("Bed Time (local): ${bedTime.hour.toString().padLeft(2, '0')}:${bedTime.minute.toString().padLeft(2, '0')}");
-      log("Wake Time (local): ${wakeTime.hour.toString().padLeft(2, '0')}:${wakeTime.minute.toString().padLeft(2, '0')}");
+      // Sleep times calculated successfully
     }
 
     return SleepSummary(
@@ -930,7 +910,7 @@ class SleepParser {
     List<List<int>> splitYesterdayData = _splitListByMarker(processableYesterdayList, markerYesterday);
     
     if (splitYesterdayData.isEmpty) {
-      log("No sleep data found for yesterday");
+      // No sleep data found for yesterday
       return SleepSummary(durations: {}, segments: []);
     }
 
