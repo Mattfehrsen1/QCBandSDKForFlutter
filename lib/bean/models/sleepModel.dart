@@ -108,23 +108,19 @@ class SleepParser {
   // Protocol detection method
   static SleepProtocol _detectProtocol(List<int> data) {
     if (data.length >= 2) {
-      // Special case: 59-byte packets with [188, 39] are actually Standard Protocol
-      if (data[0] == 188 && data[1] == 39 && data.length == 59) {
-        return SleepProtocol.standard;
-      }
-      
-      // Large Data Protocol: [188, 39] with 100+ bytes  
-      if (data[0] == 188 && data[1] == 39 && data.length >= 100) {
+      // FIXED: Command [188, 39] is ALWAYS Large Data Protocol regardless of size
+      // This includes Day 0 packets (55 bytes) and multi-day packets (100+ bytes)
+      if (data[0] == 188 && data[1] == 39) {
         return SleepProtocol.largeData;
       }
       
-      // Standard Protocol: [188, 68] or any other small packets
+      // Standard Protocol: [188, 68] or any other commands
       if (data[0] == 188 && data[1] == 68) {
         return SleepProtocol.standard;
       }
     }
     
-    // Fallback: size-based detection
+    // Fallback: size-based detection for unknown commands
     return data.length >= 100 ? SleepProtocol.largeData : SleepProtocol.standard;
   }
 
