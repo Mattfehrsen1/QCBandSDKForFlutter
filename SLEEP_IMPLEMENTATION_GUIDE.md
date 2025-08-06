@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide explains how to implement the sleep data functionality from the QCBandSDKForFlutter package in your Flutter application. The implementation supports both Day 0 (current day) and historical sleep data (Days 1-6) with different packet structures and parsing methods.
+This guide explains how to implement sleep data functionality in your Flutter application using the QCBandSDKForFlutter package. You'll learn how to request, parse, and display sleep data with support for both Day 0 (current day) and historical sleep data (Days 1-6).
 
 ## Prerequisites
 
@@ -11,15 +11,29 @@ This guide explains how to implement the sleep data functionality from the QCBan
 - BLE device connection established
 - `flutter_blue_plus` package for BLE communication
 
-## Package Structure
+## Understanding Sleep Data Packets
 
-### Core Components
+The device sends two different packet formats:
 
-1. **SleepParser** (`lib/bean/models/sleepModel.dart`) - Main parsing engine
-2. **SleepSegment** - Individual sleep stage segments with timestamps
-3. **SleepSummary** - Aggregated sleep data with durations and statistics
+### Day 0 (Today) - Single-Day Format
+- **Command**: `[188, 39]`
+- **Size**: ~55 bytes
+- **Structure**:
+  - Bytes 0-1: Command `[188, 39]`
+  - Bytes 2-3: Data length
+  - Bytes 4-7: Header data
+  - Bytes 9-10: Sleep start time (minutes from midnight)
+  - Bytes 11-12: Sleep end time (minutes from midnight)
+  - Bytes 13+: Sleep segments (type, duration pairs)
 
-### Key Classes
+### Days 1-6 (Historical) - Multi-Day Format
+- **Command**: `[188, 39]`
+- **Size**: 100+ bytes
+- **Structure**: Contains multiple days with different internal format
+
+## Data Models
+
+First, create the data models in your app:
 
 ```dart
 // Sleep segment representing a time period with sleep stage
@@ -30,6 +44,15 @@ class SleepSegment {
   final int originalQuality;
   final int timeIndex;
   final int sleepIndex;
+
+  SleepSegment({
+    required this.segmentStart,
+    required this.segmentEnd,
+    required this.stageType,
+    required this.originalQuality,
+    required this.timeIndex,
+    required this.sleepIndex,
+  });
 }
 
 // Sleep summary with aggregated statistics
@@ -38,7 +61,21 @@ class SleepSummary {
   final DateTime? wakeTime;
   final Map<String, int> durations;
   final List<SleepSegment> segments;
+
+  SleepSummary({
+    this.bedTime,
+    this.wakeTime,
+    required this.durations,
+    required this.segments,
+  });
 }
+
+// Sleep stage constants
+const int kStageDeep = 1;      // Deep Sleep
+const int kStageShallow = 2;   // Light Sleep  
+const int kStageAwake = 3;     // Awake
+const int kStageREM = 4;       // REM Sleep
+const int kStageUnknown = 5;   // Unknown
 ```
 
 ## Implementation Steps
@@ -109,21 +146,177 @@ bool _isCompletePacket(List<int> data) {
 }
 ```
 
-### 3. Sleep Data Parsing
+### 3. Sleep Data Parser Implementation
+
+Create the core parsing logic in your app:
 
 ```dart
-import 'package:qc_band_sdk_for_flutter/bean/models/sleepModel.dart';
-
-// Parse raw BLE data into sleep segments
-SleepSummary parseSleepData(List<int> rawData, int dayIndex) {
-  // Create parser with day index
-  final parser = SleepParser(rawData, currentIndex: dayIndex);
+class SleepDataParser {
   
-  // Parse to segments (handles Day 0 vs Days 1-6 automatically)
-  final segments = parser.parseToSegments(null);
+  // Main parsing method - determines format and routes accordingly
+  static SleepSummary parseSleepData(List<int> rawData, int dayIndex) {
+    if (rawData.isEmpty || rawData.length < 8) {
+      return _emptySummary();
+    }
+    
+    // Check if this is a Day 0 packet (single-day format)
+    if (dayIndex == 0 && rawData.length < 100) {
+      return _parseDay0SingleFormat(rawData);
+    } else {
+      return _parseMultiDayFormat(rawData, dayIndex);
+    }
+  }
   
-  // Generate summary with statistics
-  return parser.getSleepSummaryWithTimestamps(null);
+  // Parse Day 0 (today) - single-day format
+  static SleepSummary _parseDay0SingleFormat(List<int> data) {
+    if (data.length < 13) {
+      return _emptySummary();
+    }
+    
+    // Extract sleep times from specific byte positions for Day 0
+    int startMinutes = data[9] | (data[10] << 8);   // Bytes 9-10
+    int endMinutes = data[11] | (data[12] << 8);    // Bytes 11-12
+    
+    // Calculate dates
+    DateTime today = DateTime.now();
+    DateTime yesterday = today.subtract(const Duration(days: 1));
+    
+    // Day 0: yesterday evening → today morning
+    DateTime bedTime = DateTime(
+      yesterday.year,
+      yesterday.month, 
+      yesterday.day,
+    ).add(Duration(minutes: startMinutes));
+    
+    DateTime wakeTime = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).add(Duration(minutes: endMinutes));
+    
+    // Parse sleep segments starting from byte 13
+    List<SleepSegment> segments = _parseSegments(
+      data.sublist(13), 
+      bedTime
+    );
+    
+    // Calculate durations
+    Map<String, int> durations = _calculateDurations(segments);
+    
+    return SleepSummary(
+      bedTime: bedTime,
+      wakeTime: wakeTime,
+      durations: durations,
+      segments: segments,
+    );
+  }
+  
+  // Parse Days 1-6 (historical) - multi-day format  
+  static SleepSummary _parseMultiDayFormat(List<int> data, int dayIndex) {
+    if (data.length < 20) {
+      return _emptySummary();
+    }
+    
+    // This is a simplified version - you may need to implement
+    // the full multi-day parsing based on your specific needs
+    // For now, return empty summary
+    return _emptySummary();
+  }
+  
+  // Parse sleep segments from raw segment data
+  static List<SleepSegment> _parseSegments(List<int> segmentData, DateTime startTime) {
+    List<SleepSegment> segments = [];
+    DateTime currentTime = startTime;
+    
+    // Parse segments as (type, duration) pairs
+    for (int i = 0; i < segmentData.length - 1; i += 2) {
+      int type = segmentData[i];
+      int duration = segmentData[i + 1];
+      
+      // Handle negative bytes
+      if (duration < 0) duration = duration & 0xFF;
+      
+      DateTime segmentStart = currentTime;
+      DateTime segmentEnd = currentTime.add(Duration(minutes: duration));
+      
+      // Map device sleep types to our constants
+      int stageType = _mapSleepType(type);
+      
+      segments.add(SleepSegment(
+        segmentStart: segmentStart,
+        segmentEnd: segmentEnd,
+        stageType: stageType,
+        originalQuality: type,
+        timeIndex: i ~/ 2,
+        sleepIndex: duration,
+      ));
+      
+      currentTime = segmentEnd;
+    }
+    
+    return segments;
+  }
+  
+  // Map device sleep types to display types
+  static int _mapSleepType(int deviceType) {
+    switch (deviceType) {
+      case 3: return kStageDeep;      // Deep sleep
+      case 2: return kStageShallow;   // Light sleep
+      case 5: return kStageAwake;     // Awake
+      case 4: return kStageREM;       // REM sleep
+      default: return kStageUnknown;  // Unknown
+    }
+  }
+  
+  // Calculate sleep stage durations
+  static Map<String, int> _calculateDurations(List<SleepSegment> segments) {
+    int totalDuration = 0;
+    int deepSleep = 0;
+    int lightSleep = 0;
+    int remSleep = 0;
+    int awake = 0;
+    
+    for (final segment in segments) {
+      int duration = segment.segmentEnd.difference(segment.segmentStart).inMinutes;
+      totalDuration += duration;
+      
+      switch (segment.stageType) {
+        case kStageDeep:
+          deepSleep += duration;
+          break;
+        case kStageShallow:
+          lightSleep += duration;
+          break;
+        case kStageREM:
+          remSleep += duration;
+          break;
+        case kStageAwake:
+          awake += duration;
+          break;
+      }
+    }
+    
+    return {
+      'totalDuration': totalDuration,
+      'deepSleep': deepSleep,
+      'lightSleep': lightSleep,
+      'rapidEyeMovement': remSleep,
+      'awake': awake,
+    };
+  }
+  
+  static SleepSummary _emptySummary() {
+    return SleepSummary(
+      durations: {
+        'totalDuration': 0,
+        'deepSleep': 0,
+        'lightSleep': 0,
+        'rapidEyeMovement': 0,
+        'awake': 0,
+      },
+      segments: [],
+    );
+  }
 }
 ```
 
@@ -147,8 +340,8 @@ class SleepDataCollector {
         final rawData = await _manager.requestSleepData(dayIndex);
         
         if (rawData != null && rawData.isNotEmpty) {
-          // Parse data
-          final summary = parseSleepData(rawData, dayIndex);
+          // Parse data using our custom parser
+          final summary = SleepDataParser.parseSleepData(rawData, dayIndex);
           
           if (summary.bedTime != null && summary.wakeTime != null) {
             sleepData[dayIndex] = summary;
@@ -354,12 +547,13 @@ const int kStageUnknown = 5;   // Unknown/Transitional
 
 ### Debug Information
 
-Enable debug output during development:
+Add debug output to your parser during development:
 
 ```dart
-// Add this to see detailed parsing information
-final parser = SleepParser(rawData, currentIndex: dayIndex);
-parser.testTimestampCalculation(); // Only for debugging
+// Add debug prints to _parseDay0SingleFormat method
+print("Day 0 Debug - Start: $startMinutes min (${startMinutes ~/ 60}:${(startMinutes % 60).toString().padLeft(2, '0')})");
+print("Day 0 Debug - End: $endMinutes min (${endMinutes ~/ 60}:${(endMinutes % 60).toString().padLeft(2, '0')})");
+print("Day 0 Debug - Segments: ${data.sublist(13).take(20).toList()}...");
 ```
 
 ## Dependencies
@@ -374,6 +568,8 @@ dependencies:
       url: https://github.com/Mattfehrsen1/QCBandSDKForFlutter.git
       ref: main
 ```
+
+**Note**: You only need the QCBandSDKForFlutter package for the BLE command generation (`QCBandSDK.getSleepData()`) and constants (`QcBandSdkConst.getSleepData`). All the parsing logic shown in this guide should be implemented directly in your app.
 
 ## Support
 
