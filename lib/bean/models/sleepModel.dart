@@ -543,23 +543,14 @@ class SleepParser {
       return segments;
     }
 
-    // Day 0 specific packet structure (identified from analysis):
+    // Day 0 specific packet structure:
     // Bytes 0-1:   Command [188, 39]
-    // Bytes 2-3:   Data length [49, 0]
-    // Bytes 4-7:   Unknown header data [16, 21, 1, 0]
-    // Bytes 8:     Some value [46] (maybe segment count?)
-    // Bytes 9-11:  Sleep start [121, 5] = 1401 minutes = 23:21
-    // Bytes 11-13: Sleep end [203, 1] = 459 minutes = 07:39  
+    // Bytes 2-3:   Data length
+    // Bytes 4-7:   Unknown header data
+    // Bytes 8:     Some value (possibly segment count)
+    // Bytes 9-10:  Sleep start time in minutes
+    // Bytes 11-12: Sleep end time in minutes  
     // Bytes 13+:   Sleep segments (type-duration pairs)
-    
-    print("🔍 DAY 0 PACKET STRUCTURE (CORRECTED):");
-    print("  Raw packet: ${_data.take(20).toList()}...");
-    print("  Bytes 0-1: Command [${_data[0]}, ${_data[1]}] = [188, 39]");
-    print("  Bytes 2-3: Data length [${_data[2]}, ${_data[3]}] = ${_data[2] | (_data[3] << 8)} bytes");
-    print("  Bytes 4-7: Unknown header [${_data[4]}, ${_data[5]}, ${_data[6]}, ${_data[7]}]");
-    if (_data.length > 8) {
-      print("  Byte 8: Value [${_data[8]}] (possibly segment count)");
-    }
     
     // Extract sleep times from correct positions for Day 0
     int startMinutes, endMinutes;
@@ -568,16 +559,10 @@ class SleepParser {
       startMinutes = _data[9] | (_data[10] << 8);
       // Bytes 11-12: Sleep end time  
       endMinutes = _data[11] | (_data[12] << 8);
-      
-      print("  Bytes 9-10: Sleep start [${_data[9]}, ${_data[10]}] = $startMinutes minutes = ${(startMinutes ~/ 60).toString().padLeft(2, '0')}:${(startMinutes % 60).toString().padLeft(2, '0')}");
-      print("  Bytes 11-12: Sleep end [${_data[11]}, ${_data[12]}] = $endMinutes minutes = ${(endMinutes ~/ 60).toString().padLeft(2, '0')}:${(endMinutes % 60).toString().padLeft(2, '0')}");
-      
-      print("  ✅ Using Day 0 specific byte positions for time extraction");
     } else {
       // Fallback if packet is too short
       startMinutes = _data[4] | (_data[5] << 8);
       endMinutes = _data[6] | (_data[7] << 8);
-      print("  ⚠️ Packet too short for Day 0 format, using fallback positions");
     }
 
     // Calculate base date for Day 0 sleep session
@@ -600,15 +585,9 @@ class SleepParser {
       sleepEndDate.month, 
       sleepEndDate.day
     ).add(Duration(minutes: endMinutes));
-    
-    print("  Final times: ${bedTime.hour.toString().padLeft(2, '0')}:${bedTime.minute.toString().padLeft(2, '0')} → ${wakeTime.hour.toString().padLeft(2, '0')}:${wakeTime.minute.toString().padLeft(2, '0')}");
 
     // Extract sleep segment data starting from byte 13 for Day 0
     List<int> segmentData = _data.sublist(13);
-    
-    print("  Sleep segment data starting at byte 13 (${segmentData.length} bytes): ${segmentData.take(20).toList()}${segmentData.length > 20 ? '...' : ''}");
-    print("  Calculated bed time: $bedTime");
-    print("  Calculated wake time: $wakeTime");
     
     // Parse sleep segments as (type, duration) pairs
     DateTime currentTime = bedTime;
