@@ -968,542 +968,157 @@ class _DeviceScreenState extends State<DeviceScreen> {
     }
   }
 
-  sleepDetailData() async {
-    // CRITICAL: First debug to verify function is called
-    // Fetch sleep data for multiple days
-    log("🚨🚨🚨 sleepDetailData() FUNCTION CALLED! 🚨🚨🚨");
-
-    // Run timestamp calculation test first
-    print("Running timestamp calculation test...");
-    // SleepParser.testTimestampCalculation();
-
-    // 🎯 REAL DATA TEST - Manually decode the 51-byte packet we saw for Day 1
-    print("\n🎯 TESTING REAL DEVICE DATA FROM LOGS 🎯");
-    // List<int> realDeviceData = [
-    //   188,
-    //   39,
-    //   31,
-    //   0,
-    //   124,
-    //   229,
-    //   1,
-    //   2,
-    //   28,
-    //   1,
-    //   1,
-    //   232,
-    //   1,
-    //   2,
-    //   21,
-    //   5,
-    //   8,
-    //   3,
-    //   39,
-    //   2,
-    //   11,
-    //   5,
-    //   3,
-    //   3,
-    //   21,
-    //   5,
-    //   3,
-    //   4,
-    //   19,
-    //   2,
-    //   31,
-    //   3,
-    //   38,
-    //   4,
-    //   18,
-    //   2,
-    //   19
-    // ];
-
-    // print("Real device packet length: ${realDeviceData.length} bytes");
-    // print("Real device packet: ${realDeviceData.sublist(0, 20)}...");
-
-    // // Manual decoding to verify structure
-    // int startMinutes = realDeviceData[4] | (realDeviceData[5] << 8);
-    // int endMinutes = realDeviceData[6] | (realDeviceData[7] << 8);
-
-    // print(
-    //     "Manual decode - Start: $startMinutes minutes (${(startMinutes ~/ 60).toString().padLeft(2, '0')}:${(startMinutes % 60).toString().padLeft(2, '0')})");
-    // print(
-    //     "Manual decode - End: $endMinutes minutes (${(endMinutes ~/ 60).toString().padLeft(2, '0')}:${(endMinutes % 60).toString().padLeft(2, '0')})");
-
-    // // Test with SleepParser
-    // SleepParser realParser = SleepParser(realDeviceData, currentIndex: 3);
-    // SleepSummary realSummary = realParser.getSleepSummaryWithTimestamps();
-
-    // print("🌙 REAL DEVICE DATA RESULTS:");
-    // print("  Bed Time: ${realSummary.bedTime}");
-    // print("  Wake Time: ${realSummary.wakeTime}");
-    // if (realSummary.bedTime != null && realSummary.wakeTime != null) {
-    //   print(
-    //       "  📍 Bed Time (local): ${realSummary.bedTime!.hour.toString().padLeft(2, '0')}:${realSummary.bedTime!.minute.toString().padLeft(2, '0')}");
-    //   print(
-    //       "  📍 Wake Time (local): ${realSummary.wakeTime!.hour.toString().padLeft(2, '0')}:${realSummary.wakeTime!.minute.toString().padLeft(2, '0')}");
-    // }
-    // print("  Segments: ${realSummary.segments.length}");
-
-    // Multi-level packet validation functions
-
-    // Large Data Protocol validation (for multi-day packets)
-    bool _validateLargeDataPacket(List<int> data, int expectedDay) {
-      // Check 3: Valid packet length field (little-endian)
-      // NOTE: BLE adds 6-byte wrapper, so actual length = declared + 6
-      int declaredLength = data[2] | (data[3] << 8);
-      int expectedActualLength = declaredLength + 6;
-      if (data.length != expectedActualLength &&
-          data.length != declaredLength) {
-        // Length validation failed
-        return false;
-      }
-      // Length validation passed
-
-      // Check 4: Valid multi-day structure
-      if (data.length < 9) {
-        // Packet too short
-        return false;
-      }
-
-      int totalDays = data[6] & 0xFF;
-      if (totalDays == 0) {
-        // Zero days detected
-        return false;
-      }
-
-      if (totalDays > 7) {
-        // Too many days
-        return false;
-      }
-
-      // Check 5: Size-based validation - large packets are true multi-day
-      if (data.length >= 100) {
-        // Large Data Protocol validation passed
-        return true;
-      }
-
-      // NEW: 59-byte packets are single-day Standard Protocol (misnamed but valid)
-      if (data.length == 59 && totalDays == 1) {
-        print(
-            "✅ VALIDATION: 59-byte packet detected as Standard Protocol (single day, ${data.length} bytes)");
-        return false; // Return false to route to Standard Protocol parser
-      }
-
-      // Invalid packet size
-      return false;
+  // Clean method to get sleep data for all days with timestamps
+  Future<void> getSleepDataForAllDays() async {
+    print("🌙 Fetching sleep data for all available days...");
+    
+    // Fetch sleep data for the last 7 days (0 = today, 6 = 6 days ago)
+    for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+      await _fetchAndDisplaySleepData(dayIndex);
+      
+      // Small delay between requests to avoid overwhelming the device
+      await Future.delayed(const Duration(milliseconds: 300));
     }
+    
+    print("✅ Sleep data collection complete!");
+  }
 
-    // Standard Protocol validation (for 59-byte single-day packets)
-    bool _validateStandardPacket(List<int> data, int expectedDay) {
-      // Accept 59-byte packets specifically (our main target)
-      if (data.length == 59) {
-        // Validate length consistency
-        int declaredLength = data[2] | (data[3] << 8);
-        int expectedActualLength = declaredLength + 6;
-        if (data.length != expectedActualLength) {
-          // Length mismatch
-          return false;
-        }
-
-        // Should have totalDays = 1 for single-day data
-        if (data.length >= 7 && data[6] != 1) {
-          // Invalid totalDays for Standard Protocol
-          return false;
-        }
-
-        // Standard Protocol validation passed
-        return true;
-      }
-
-      // Accept other reasonable sizes for Standard Protocol
-      if (data.length >= 20 && data.length <= 100) {
-        // Standard Protocol validation passed
-        return true;
-      }
-
-      // Invalid Standard Protocol size
-      return false;
-    }
-
-    bool containsExpectedDay(List<int> data, int expectedDay) {
-      if (data.length < 9) return false;
-
-      int totalDays = data[6] & 0xFF;
-      int firstDayId = data[7] & 0xFF;
-
-      // Check if our expected day is in this packet's range
-      for (int i = 0; i < totalDays; i++) {
-        if (firstDayId - i == expectedDay) {
-          // Day found in packet
-          return true;
-        }
-      }
-
-      // Day not found in packet
-      return false;
-    }
-
-    // Main validation function that routes to protocol-specific validators
-    bool isValidMultiDayPacket(List<int> data, int expectedDay) {
-      // Check 1: Must be at least header size + some data
-      if (data.length < 10) {
-        // Packet too short
-        return false;
-      }
-
-      // Check 2: Correct command bytes (accept both protocols)
-      if (data[0] != 188) {
-        // Invalid command header
-        return false;
-      }
-
-      if (data[1] != 39 && data[1] != 68) {
-        // Invalid sub-command
-        return false;
-      }
-
-      // NEW: Special routing logic for 59-byte packets
-      if (data.length == 59 && data[1] == 39) {
-        // Routing to Standard Protocol parser
-        return _validateStandardPacket(data, expectedDay);
-      }
-
-      // Protocol-specific validation for other packets
-      if (data[1] == 39) {
-        return _validateLargeDataPacket(data, expectedDay);
+  // Fetch and display sleep data for a specific day
+  Future<void> _fetchAndDisplaySleepData(int dayIndex) async {
+    try {
+      List<int> sleepData = await _requestSleepDataFromDevice(dayIndex);
+      
+      if (sleepData.isNotEmpty && sleepData.length >= 13) {
+        final parser = SleepParser(sleepData, currentIndex: dayIndex);
+        final summary = parser.getSleepSummaryWithTimestamps();
+        
+        _displaySleepSummary(dayIndex, summary);
       } else {
-        return _validateStandardPacket(data, expectedDay);
+        print("Day $dayIndex: No sleep data available");
       }
-    }
-
-    // Helper function to get stage display name
-    String _getStageDisplayName(int stageType) {
-      switch (stageType) {
-        case 1:
-          return "deep";
-        case 2:
-          return "light";
-        case 3:
-          return "awake";
-        case 4:
-          return "rem";
-        case 5:
-          return "unknown";
-        default:
-          return "unknown";
-      }
-    }
-
-    // Helper function to request data and collect all packets for a day
-    Future<List<int>> fetchSingleDayResponse(int day) async {
-      // Fetch sleep data for day $day from BLE device
-
-      final completer = Completer<List<int>>();
-      List<int>? bestValidPacket;
-      Timer? timeoutTimer;
-
-      // Multi-packet assembly state (from LargeDataParser.java)
-      List<int>? tempPacketData;
-      int expectedDataLength = 0;
-
-      // CRITICAL DEBUG: Test if the characteristic is working
-      print("🔍 DEBUGGING CHARACTERISTIC for day $day");
-      print(
-          "🔍 _secondbluetoothCharacteristicNotification exists: ${_secondbluetoothCharacteristicNotification != null}");
-      if (_secondbluetoothCharacteristicNotification != null) {
-        print(
-            "🔍 Characteristic UUID: ${_secondbluetoothCharacteristicNotification!.uuid}");
-      } else {
-        print("🔍 Characteristic is NULL - this is the problem!");
-      }
-
-      // CRITICAL: Set up listener BEFORE sending the write command to avoid race condition
-      final subscription =
-          _secondbluetoothCharacteristicNotification.value.listen((value) {
-        // Check if this is a sleep data response
-
-        if (value.isNotEmpty && value[1] == QcBandSdkConst.getSleepData) {
-          // Process multi-packet assembly for day $day
-
-          // Official Logic from LargeDataParser.java
-          if (value.length >= 6 && (value[0] & 255) == 188) {
-            // First packet: Extract total data length
-            expectedDataLength = (value[2] & 255) | ((value[3] & 255) << 8);
-            // Extract declared length from first packet
-
-            if (value.length - 6 >= expectedDataLength) {
-              // Complete packet in one go
-              // Complete packet received
-              List<int> completePacket = List<int>.from(value);
-
-              if (isValidMultiDayPacket(completePacket, day) &&
-                  containsExpectedDay(completePacket, day)) {
-                // Valid complete packet accepted
-                bestValidPacket = completePacket;
-
-                timeoutTimer?.cancel();
-                timeoutTimer = Timer(Duration(milliseconds: 200), () {
-                  if (!completer.isCompleted && bestValidPacket != null) {
-                    completer.complete(bestValidPacket!);
-                  }
-                });
-              } else {
-                // Complete packet rejected
-              }
-
-              // End packet validation
-              return;
-            }
-
-            // Start of multi-packet: Store first chunk
-            print(
-                "🔄 MULTI-PACKET START: Storing first chunk (${value.length} bytes)");
-            tempPacketData = List<int>.from(value);
-            print("=== END PACKET VALIDATION ===");
-            return;
-          }
-
-          // Continuation packets: Accumulate data
-          if (tempPacketData != null) {
-            print(
-                "🔄 CONTINUATION PACKET: Adding ${value.length} bytes to accumulated data");
-            tempPacketData!.addAll(value);
-            print(
-                "📊 ACCUMULATED: ${tempPacketData!.length} bytes, Expected: ${expectedDataLength + 6}");
-
-            if (tempPacketData!.length - 6 == expectedDataLength) {
-              // Complete assembly: Process accumulated data
-              print(
-                  "✅ ASSEMBLY COMPLETE: Processing ${tempPacketData!.length} bytes");
-              List<int> assembledPacket = List<int>.from(tempPacketData!);
-
-              if (isValidMultiDayPacket(assembledPacket, day) &&
-                  containsExpectedDay(assembledPacket, day)) {
-                print(
-                    "✅ ASSEMBLED PACKET ACCEPTED: Valid multi-packet for day $day");
-                bestValidPacket = assembledPacket;
-
-                timeoutTimer?.cancel();
-                timeoutTimer = Timer(Duration(milliseconds: 200), () {
-                  if (!completer.isCompleted && bestValidPacket != null) {
-                    // Using assembled packet
-                    completer.complete(bestValidPacket!);
-                  }
-                });
-              } else {
-                // Assembled packet rejected
-              }
-
-              // Reset assembly state
-              tempPacketData = null;
-              expectedDataLength = 0;
-            } else if (tempPacketData!.length - 6 > expectedDataLength) {
-              print(
-                  "❌ ASSEMBLY ERROR: Too much data received (${tempPacketData!.length - 6} > $expectedDataLength)");
-              tempPacketData = null;
-              expectedDataLength = 0;
-            }
-
-            print("=== END PACKET VALIDATION ===");
-            return;
-          }
-
-          // Fallback: Unknown packet type - not a valid sleep data packet
-        }
-      });
-
-      // Add a small delay to ensure listener is ready
-      await Future.delayed(Duration(milliseconds: 50));
-
-      await _secondbluetoothCharacteristicWrite
-          .write(QCBandSDK.getSleepData(day));
-      print("Command for sleep data for day $day requested successfully.");
-
-      // Wait for the response, with a timeout
-      final response = await completer.future
-          .timeout(const Duration(seconds: 10), onTimeout: () {
-        // Timeout: no valid packets received
-        timeoutTimer?.cancel();
-        // Return best packet we found, or empty if none
-        return bestValidPacket ?? [];
-      });
-
-      subscription.cancel();
-      timeoutTimer?.cancel();
-
-      // Sleep data fetch complete
-      return response;
-    }
-
-    // --- Main Logic ---
-
-    // 1. Fetch and process Today's data (Day 0) separately
-    List<int> todayData = await fetchSingleDayResponse(0);
-    if (todayData.isNotEmpty && todayData.length >= 13) {
-      final parser = SleepParser(todayData, currentIndex: 0);
-
-      // Get traditional summary
-      final summary = parser.getSleepSummary();
-      print("\nSleep Summary for day 0 (Today): $summary");
-
-      // Get enhanced summary with timestamps (date extracted from data)
-      final enhancedSummary = parser.getSleepSummaryWithTimestamps();
-      print("Enhanced Sleep Summary for Today:");
-      print("  Bed Time: ${enhancedSummary.bedTime}");
-      print("  Wake Time: ${enhancedSummary.wakeTime}");
-      print("  Duration Breakdown: ${enhancedSummary.durations}");
-      print("  Total Segments: ${enhancedSummary.segments.length}");
-
-      // Show first few segments for debugging
-      if (enhancedSummary.segments.isNotEmpty) {
-        print("  First few segments:");
-        for (int i = 0; i < 5 && i < enhancedSummary.segments.length; i++) {
-          final seg = enhancedSummary.segments[i];
-          print(
-              "    ${seg.segmentStart} - ${seg.segmentEnd} (stage: ${seg.stageType}, quality: ${seg.originalQuality})");
-        }
-      }
-    } else if (todayData.isNotEmpty) {
-      print(
-          "\nDay 0 (Today): Response too short (${todayData.length} bytes) - no sleep data available");
-    } else {
-      print("\nDay 0 (Today): No response received");
-    }
-
-    // 🎯 SPECIAL PROCESSING FOR DAY 1 (August 4th-5th) - Your newest sleep data!
-    print(
-        "\n🎯 PROCESSING DAY 1 (August 4th-5th) - Your Latest Sleep Data! 🎯");
-    List<int> day1Data = await fetchSingleDayResponse(1);
-    if (day1Data.isNotEmpty && day1Data.length >= 13) {
-      // Day 1 data received
-
-      final day1Parser = SleepParser(day1Data, currentIndex: 1);
-      final day1Summary = day1Parser.getSleepSummaryWithTimestamps();
-
-      print("🌙 DAY 1 (August 4th-5th) SLEEP ANALYSIS:");
-      print("  Bed Time: ${day1Summary.bedTime}");
-      print("  Wake Time: ${day1Summary.wakeTime}");
-
-      if (day1Summary.bedTime != null && day1Summary.wakeTime != null) {
-        print(
-            "  📍 Bed Time (local): ${day1Summary.bedTime!.hour.toString().padLeft(2, '0')}:${day1Summary.bedTime!.minute.toString().padLeft(2, '0')}");
-        print(
-            "  📍 Wake Time (local): ${day1Summary.wakeTime!.hour.toString().padLeft(2, '0')}:${day1Summary.wakeTime!.minute.toString().padLeft(2, '0')}");
-      }
-
-      print("  Duration Breakdown: ${day1Summary.durations}");
-      print("  Total Segments: ${day1Summary.segments.length}");
-    } else {
-      // Day 1 data insufficient
-    }
-
-    // Test specific day data
-    List<int> day4Data = await fetchSingleDayResponse(4);
-    if (day4Data.isNotEmpty && day4Data.length >= 13) {
-      // Day 4 data received
-      final day4Parser = SleepParser(day4Data, currentIndex: 4);
-      final day4Summary = day4Parser.getSleepSummaryWithTimestamps();
-      // Day 4 processed successfully
-    } else {
-      // Day 4 data insufficient
-    }
-
-    // Keep track of the previous day's data for parsing
-    List<int> previousDayData = todayData;
-
-    // 2. Fetch and process historical data (Day 1 to 6)
-    for (int i = 1; i < 7; i++) {
-      // The device sends data for day `i` and `i-1` together when we ask for day `i`.
-      // The `getSleepSummaryYesterday` method internally splits this combined data.
-      List<int> combinedResponse = await fetchSingleDayResponse(i);
-
-      if (combinedResponse.isNotEmpty && combinedResponse.length >= 13) {
-        final parser = SleepParser(combinedResponse, currentIndex: i);
-
-        // For historical data, use direct parsing instead of yesterday parsing
-        // since the data format seems to contain the sleep data directly
-
-        // Get enhanced summary with timestamps (date extracted from data)
-        final enhancedSummary = parser.getSleepSummaryWithTimestamps();
-
-        // Create clean JSON output with sleep stage breakdown
-        Map<String, dynamic> sleepDataJson = {
-          "day_$i": {
-            "status": "available",
-            "bed_time": enhancedSummary.bedTime?.toIso8601String(),
-            "wake_time": enhancedSummary.wakeTime?.toIso8601String(),
-            "duration_minutes": enhancedSummary.durations['totalDuration'],
-            "stage_breakdown": {
-              "light_sleep_minutes": enhancedSummary.durations['lightSleep'],
-              "deep_sleep_minutes": enhancedSummary.durations['deepSleep'],
-              "rem_sleep_minutes":
-                  enhancedSummary.durations['rapidEyeMovement'],
-              "awake_minutes": enhancedSummary.durations['awake'],
-            },
-            "segments": enhancedSummary.segments
-                .map((seg) => {
-                      "start": seg.segmentStart.toIso8601String(),
-                      "end": seg.segmentEnd.toIso8601String(),
-                      "stage": _getStageDisplayName(seg.stageType),
-                      "duration_minutes":
-                          seg.segmentEnd.difference(seg.segmentStart).inMinutes,
-                    })
-                .toList(),
-            "total_segments": enhancedSummary.segments.length,
-          }
-        };
-
-        // Production sleep data summary
-        print("\nSleep Summary - Day $i:");
-        print(
-            "  ${enhancedSummary.bedTime?.hour.toString().padLeft(2, '0')}:${enhancedSummary.bedTime?.minute.toString().padLeft(2, '0')} → ${enhancedSummary.wakeTime?.hour.toString().padLeft(2, '0')}:${enhancedSummary.wakeTime?.minute.toString().padLeft(2, '0')} (${enhancedSummary.durations['totalDuration']} min)");
-        print(
-            "  Deep: ${enhancedSummary.durations['deepSleep']}min | Light: ${enhancedSummary.durations['lightSleep']}min | REM: ${enhancedSummary.durations['rapidEyeMovement']}min | Awake: ${enhancedSummary.durations['awake']}min");
-        print("  ${enhancedSummary.segments.length} segments");
-
-        // Show segment details
-        print("\nSegment Timeline (${enhancedSummary.segments.length} total):");
-        for (int segIdx = 0;
-            segIdx < enhancedSummary.segments.length && segIdx < 10;
-            segIdx++) {
-          final seg = enhancedSummary.segments[segIdx];
-          final startTime =
-              "${seg.segmentStart.hour.toString().padLeft(2, '0')}:${seg.segmentStart.minute.toString().padLeft(2, '0')}";
-          final endTime =
-              "${seg.segmentEnd.hour.toString().padLeft(2, '0')}:${seg.segmentEnd.minute.toString().padLeft(2, '0')}";
-          final duration =
-              seg.segmentEnd.difference(seg.segmentStart).inMinutes;
-          final stageName = _getStageDisplayName(seg.stageType);
-          print(
-              "  ${segIdx + 1}. $startTime → $endTime ($duration min) - $stageName");
-        }
-        if (enhancedSummary.segments.length > 10) {
-          print(
-              "  ... and ${enhancedSummary.segments.length - 10} more segments");
-        }
-
-        print("\nComplete JSON available via getSleepDataJson() method");
-      } else if (combinedResponse.isNotEmpty) {
-        print(
-            "\nℹ️ Day $i: No sleep data available (response too short: ${combinedResponse.length} bytes)");
-      } else {
-        print(
-            "\nℹ️ Day $i: No sleep data available (device not worn or no sleep recorded)");
-      }
-      // Update previousDayData for the next iteration
-      previousDayData = combinedResponse;
-
-      // Add a small delay between requests to be safe
-      await Future.delayed(const Duration(milliseconds: 200));
+    } catch (e) {
+      print("Error fetching sleep data for day $dayIndex: $e");
     }
   }
 
+  // Display clean sleep summary with timestamps
+  void _displaySleepSummary(int dayIndex, SleepSummary summary) {
+    String dayLabel = dayIndex == 0 ? "Today" : "${dayIndex} day${dayIndex > 1 ? 's' : ''} ago";
+    
+    print("\n📊 Sleep Summary - $dayLabel (Day $dayIndex):");
+    
+    if (summary.bedTime != null && summary.wakeTime != null) {
+      print("  🛏️  Bed Time: ${_formatTime(summary.bedTime!)}");
+      print("  🌅 Wake Time: ${_formatTime(summary.wakeTime!)}");
+      print("  ⏱️  Total Sleep: ${summary.durations['totalDuration']} minutes");
+      
+      print("\n  📈 Sleep Stage Breakdown:");
+      print("    💤 Deep Sleep: ${summary.durations['deepSleep']} min");
+      print("    😴 Light Sleep: ${summary.durations['lightSleep']} min");
+      print("    👁️  REM Sleep: ${summary.durations['rapidEyeMovement']} min");
+      print("    😵 Awake: ${summary.durations['awake']} min");
+      
+      print("  🔄 Total Segments: ${summary.segments.length}");
+      
+      // Show first few segments as example
+      if (summary.segments.isNotEmpty) {
+        print("\n  📊 Sleep Timeline (first 5 segments):");
+        int maxSegments = summary.segments.length > 5 ? 5 : summary.segments.length;
+        
+        for (int i = 0; i < maxSegments; i++) {
+          final segment = summary.segments[i];
+          String stageType = _getSleepStageDisplayName(segment.stageType);
+          int duration = segment.segmentEnd.difference(segment.segmentStart).inMinutes;
+          
+          print("    ${i + 1}. ${_formatTime(segment.segmentStart)} → ${_formatTime(segment.segmentEnd)} ($duration min) - $stageType");
+        }
+        
+        if (summary.segments.length > 5) {
+          print("    ... and ${summary.segments.length - 5} more segments");
+        }
+      }
+    } else {
+      print("  ❌ No valid sleep times available");
+    }
+    
+    print("  ${'-' * 50}");
+  }
+
+  // Helper to format time consistently
+  String _formatTime(DateTime time) {
+    return "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+  }
+
+  // Helper to get display name for sleep stages
+  String _getSleepStageDisplayName(int stageType) {
+    switch (stageType) {
+      case 1: return "Deep Sleep";
+      case 2: return "Light Sleep"; 
+      case 3: return "Awake";
+      case 4: return "REM Sleep";
+      case 5: return "Unknown";
+      default: return "Unknown";
+    }
+  }
+
+  // Request sleep data from the device for a specific day
+  Future<List<int>> _requestSleepDataFromDevice(int dayIndex) async {
+    final completer = Completer<List<int>>();
+    List<int>? receivedData;
+    Timer? timeoutTimer;
+
+    // Set up listener for the response
+    final subscription = _secondbluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isNotEmpty && value[1] == QcBandSdkConst.getSleepData) {
+        // Valid sleep data response received
+        if (_isValidSleepDataPacket(value)) {
+          receivedData = List<int>.from(value);
+          
+          // Use a short delay to allow for any additional packets
+          timeoutTimer?.cancel();
+          timeoutTimer = Timer(const Duration(milliseconds: 200), () {
+            if (!completer.isCompleted && receivedData != null) {
+              completer.complete(receivedData!);
+            }
+          });
+        }
+      }
+    });
+
+    // Send the command to request sleep data
+    await _secondbluetoothCharacteristicWrite.write(QCBandSDK.getSleepData(dayIndex));
+
+    // Wait for response with timeout
+    final response = await completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        timeoutTimer?.cancel();
+        return receivedData ?? [];
+      },
+    );
+
+    subscription.cancel();
+    timeoutTimer?.cancel();
+
+    return response;
+  }
+
+  // Basic validation for sleep data packets
+  bool _isValidSleepDataPacket(List<int> data) {
+    // Basic checks: minimum length and correct command header
+    return data.length >= 10 && 
+           data[0] == 188 && 
+           (data[1] == 39 || data[1] == 68);
+  }
+
+  // Legacy method - keeping for backward compatibility but simplified
+  sleepDetailData() async {
+    print("⚠️  sleepDetailData() is deprecated. Use getSleepDataForAllDays() instead.");
+    await getSleepDataForAllDays();
+  }
+
   historicalSleepData() async {
-    // This function is deprecated as its logic has been integrated into sleepDetailData.
-    print(
-        "historicalSleepData is deprecated and its logic is now in sleepDetailData.");
+    print("historicalSleepData is deprecated and its logic is now in getSleepDataForAllDays.");
   }
 
   deviceTimeSet() async {
@@ -1830,14 +1445,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  TODO: // Working Need Work on Parsing
-                  sleepDetailData();
-                  // Parse Response
+                  getSleepDataForAllDays();
                 },
-                child: Text('Sleep Details Data'),
+                child: Text('Get Sleep Data (All Days)'),
               ),
               TextButton(
                 onPressed: () {
