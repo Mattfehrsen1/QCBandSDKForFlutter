@@ -961,13 +961,6 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
-  
-  static Uint8List factoryResetDevice() {
-    final List<int> value = _generateInitValue();
-    value[0] = 0xFF;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
 //   ///重启设备
 //   ///MCU soft reset command
 //   static Uint8List MCUReset() {
