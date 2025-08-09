@@ -1501,6 +1501,32 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 child: Text('Set Time'),
               ),
               TextButton(
+                onPressed: () async {
+                  try {
+                    await _bluetoothCharacteristicWrite.write(
+                      QCBandSDK.rebootDevice(),
+                    );
+                    Snackbar.show(ABC.c, "Reboot command sent", success: true);
+                  } catch (e) {
+                    Snackbar.show(ABC.c, prettyException("Reboot Error:", e), success: false);
+                  }
+                },
+                child: Text('Reboot Device'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    await _bluetoothCharacteristicWrite.write(
+                      QCBandSDK.factoryResetDevice(),
+                    );
+                    Snackbar.show(ABC.c, "Factory reset command sent", success: true);
+                  } catch (e) {
+                    Snackbar.show(ABC.c, prettyException("Factory Reset Error:", e), success: false);
+                  }
+                },
+                child: Text('Factory Reset (Dangerous)'),
+              ),
+              TextButton(
                 onPressed: () {
                   // Notify Listenner of the Command
                   // getDeviceBattery();
