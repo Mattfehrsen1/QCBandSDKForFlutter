@@ -31,3 +31,8 @@ migrate_working_dir/
 .flutter-plugins
 .flutter-plugins-dependencies
 build/
+
+skylot-jadx-0db11e4/
+
+# Ignore decompiled outputs
+decompiled/
