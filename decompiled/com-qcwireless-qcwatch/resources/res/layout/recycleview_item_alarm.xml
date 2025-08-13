@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.qcwireless.qcwatch.ui.base.view.recycleview.SwipeItemLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="@dimen/qc_dp_54"
+    app:layout_constraintLeft_toLeftOf="parent"
+    app:layout_constraintTop_toTopOf="parent">
+    <RelativeLayout
+        android:id="@+id/main"
+        android:background="@color/color_F9F9F9"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <com.qcwireless.qcwatch.ui.base.view.QSettingItemWithClickSystem
+            android:id="@+id/alarm_detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/qc_dp_54"
+            app:LtextColor="@color/rcv_item_alarm_title"
+            app:isShowRightText="true"
+            app:isShowSubTitle="true"
+            app:leftIcon="@mipmap/device_alarm"
+            app:leftText=""
+            app:rightStyle="iconSwitch"
+            app:rightText=""
+            app:rightTextColor="@color/rcv_item_alarm_content"/>
+    </RelativeLayout>
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent">
+        <Button
+            android:textSize="16sp"
+            android:textColor="#fff"
+            android:id="@+id/btn_delete"
+            android:background="#ff0000"
+            android:layout_width="100dp"
+            android:layout_height="match_parent"
+            android:text="@string/qc_text_356"
+            app:textAllCaps="false"/>
+    </LinearLayout>
+</com.qcwireless.qcwatch.ui.base.view.recycleview.SwipeItemLayout>

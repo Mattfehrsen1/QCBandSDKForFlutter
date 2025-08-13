@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@color/color_F9F9F9"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="@dimen/qc_dp_48">
+    <TextView
+        android:textSize="@dimen/qc_dp_18"
+        android:textColor="@color/rcv_item_footer"
+        android:gravity="center"
+        android:id="@+id/healthy_tv_bottom_edit"
+        android:padding="@dimen/qc_dp_10"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/qc_text_6"
+        app:layout_constraintTop_toTopOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

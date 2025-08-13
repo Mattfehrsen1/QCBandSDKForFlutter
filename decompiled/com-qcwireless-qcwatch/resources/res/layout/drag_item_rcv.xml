@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="60dp">
+    <ImageView
+        android:id="@+id/item_list_menu_imageView"
+        android:padding="@dimen/qc_dp_10"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@mipmap/qc_image_1"
+        android:layout_marginStart="15dp"
+        app:layout_constraintBottom_toTopOf="@+id/line_1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+    <TextView
+        android:textSize="18sp"
+        android:textColor="@color/edit_card_item_title"
+        android:id="@+id/item_list_text_textView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:maxWidth="@dimen/qc_dp_250"
+        android:layout_marginStart="15dp"
+        app:layout_constraintBottom_toTopOf="@+id/line_1"
+        app:layout_constraintStart_toEndOf="@+id/item_list_menu_imageView"
+        app:layout_constraintTop_toTopOf="parent"/>
+    <skin.support.widget.SkinCompatCheckBox
+        android:id="@+id/item_list_switchCompat"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:button="@drawable/sel_checkbox"
+        android:layout_marginEnd="15dp"
+        app:layout_constraintBottom_toTopOf="@+id/line_1"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+    <View
+        android:id="@+id/line_1"
+        android:background="@color/edit_card_line"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginStart="@dimen/qc_dp_70"
+        app:layout_constraintBottom_toBottomOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

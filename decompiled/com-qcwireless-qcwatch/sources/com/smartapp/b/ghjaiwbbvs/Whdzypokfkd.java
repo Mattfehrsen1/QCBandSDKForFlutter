@@ -1,0 +1,315 @@
+package com.smartapp.b.ghjaiwbbvs;
+
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Rect;
+import android.graphics.drawable.ShapeDrawable;
+
+/* loaded from: classes4.dex */
+public class Whdzypokfkd extends ShapeDrawable {
+    private Rect bounds;
+    private final Paint paint;
+    private final Path path;
+
+    @Override // android.graphics.drawable.ShapeDrawable, android.graphics.drawable.Drawable
+    public int getIntrinsicHeight() {
+        return 1008;
+    }
+
+    @Override // android.graphics.drawable.ShapeDrawable, android.graphics.drawable.Drawable
+    public int getIntrinsicWidth() {
+        return 1008;
+    }
+
+    @Override // android.graphics.drawable.ShapeDrawable, android.graphics.drawable.Drawable
+    public int getOpacity() {
+        return 0;
+    }
+
+    public Whdzypokfkd() {
+        Paint paint = new Paint();
+        this.paint = paint;
+        paint.setColor(-1);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setAntiAlias(true);
+        Path path = new Path();
+        this.path = path;
+        path.lineTo(815.0f, 85.365f);
+        path.lineTo(865.0f, 375.825f);
+        path.lineTo(25.0f, 135.135f);
+        path.lineTo(785.0f, 125.535f);
+        path.lineTo(675.0f, 465.815f);
+        path.lineTo(555.0f, 615.375f);
+        path.lineTo(235.0f, 55.695f);
+        path.lineTo(455.0f, 625.395f);
+        path.lineTo(75.0f, 695.325f);
+        path.lineTo(10085.0f, 395.205f);
+        path.lineTo(845.0f, 795.685f);
+        path.lineTo(535.0f, 425.835f);
+        path.lineTo(695.0f, 205.995f);
+        path.lineTo(775.0f, 395.25f);
+        path.lineTo(305.0f, 135.125f);
+        path.lineTo(615.0f, 305.405f);
+        path.lineTo(745.0f, 485.885f);
+        path.lineTo(85.0f, 815.755f);
+        path.lineTo(935.0f, 975.915f);
+        path.lineTo(585.0f, 145.95f);
+        path.lineTo(185.0f, 5.685f);
+        path.lineTo(325.0f, 725.825f);
+        path.lineTo(505.0f, 105.105f);
+        path.lineTo(545.0f, 305.735f);
+        path.lineTo(715.0f, 165.125f);
+        path.lineTo(595.0f, 255.645f);
+        path.lineTo(625.0f, 335.305f);
+        path.lineTo(185.0f, 855.475f);
+        path.lineTo(645.0f, 345.455f);
+        path.lineTo(895.0f, 155.985f);
+        path.lineTo(165.0f, 215.775f);
+        path.lineTo(115.0f, 735.435f);
+        path.lineTo(735.0f, 135.215f);
+        path.lineTo(705.0f, 335.205f);
+        path.lineTo(565.0f, 495.535f);
+        path.lineTo(45.0f, 445.235f);
+        path.lineTo(875.0f, 5.65f);
+        path.lineTo(675.0f, 10085.875f);
+        path.lineTo(185.0f, 415.195f);
+        path.lineTo(35.0f, 305.305f);
+        path.lineTo(75.0f, 235.765f);
+        path.lineTo(995.0f, 965.655f);
+        path.lineTo(15.0f, 735.465f);
+        path.lineTo(575.0f, 255.315f);
+        path.lineTo(285.0f, 375.285f);
+        path.lineTo(255.0f, 725.835f);
+        path.lineTo(285.0f, 465.725f);
+        path.lineTo(10085.0f, 665.275f);
+        path.lineTo(625.0f, 155.995f);
+        path.lineTo(315.0f, 415.65f);
+        path.lineTo(955.0f, 305.75f);
+        path.lineTo(85.0f, 415.325f);
+        path.lineTo(35.0f, 615.975f);
+        path.lineTo(505.0f, 125.195f);
+        path.lineTo(365.0f, 665.975f);
+        path.lineTo(785.0f, 155.55f);
+        path.lineTo(975.0f, 955.635f);
+        path.lineTo(675.0f, 115.295f);
+        path.lineTo(575.0f, 435.585f);
+        path.lineTo(625.0f, 405.05f);
+        path.lineTo(505.0f, 985.525f);
+        path.lineTo(915.0f, 465.745f);
+        path.lineTo(545.0f, 985.75f);
+        path.lineTo(5.0f, 845.345f);
+        path.lineTo(435.0f, 495.485f);
+        path.lineTo(235.0f, 565.675f);
+        path.lineTo(805.0f, 975.645f);
+        path.lineTo(825.0f, 765.155f);
+        path.lineTo(885.0f, 355.555f);
+        path.lineTo(715.0f, 375.655f);
+        path.lineTo(775.0f, 885.35f);
+        path.lineTo(45.0f, 545.705f);
+        path.lineTo(265.0f, 955.15f);
+        path.lineTo(655.0f, 275.535f);
+        path.lineTo(445.0f, 455.475f);
+        path.lineTo(725.0f, 475.725f);
+        path.lineTo(805.0f, 155.965f);
+        path.lineTo(615.0f, 485.715f);
+        path.lineTo(535.0f, 655.605f);
+        path.lineTo(375.0f, 135.415f);
+        path.lineTo(395.0f, 225.625f);
+        path.lineTo(445.0f, 395.845f);
+        path.lineTo(615.0f, 555.215f);
+        path.lineTo(655.0f, 535.605f);
+        path.lineTo(955.0f, 375.775f);
+        path.lineTo(675.0f, 765.135f);
+        path.lineTo(525.0f, 955.495f);
+        path.lineTo(235.0f, 705.215f);
+        path.lineTo(595.0f, 465.935f);
+        path.lineTo(25.0f, 105.565f);
+        path.lineTo(715.0f, 445.915f);
+        path.lineTo(275.0f, 35.805f);
+        path.lineTo(225.0f, 15.925f);
+        path.lineTo(795.0f, 355.265f);
+        path.lineTo(735.0f, 795.285f);
+        path.lineTo(10085.0f, 645.915f);
+        path.lineTo(935.0f, 555.225f);
+        path.lineTo(765.0f, 915.315f);
+        path.lineTo(235.0f, 925.675f);
+        path.lineTo(235.0f, 395.15f);
+        path.lineTo(185.0f, 10085.685f);
+        path.lineTo(285.0f, 265.515f);
+        path.lineTo(965.0f, 465.05f);
+        path.lineTo(845.0f, 85.165f);
+        path.lineTo(865.0f, 45.915f);
+        path.lineTo(465.0f, 55.185f);
+        path.lineTo(885.0f, 955.155f);
+        path.lineTo(25.0f, 755.65f);
+        path.lineTo(665.0f, 305.665f);
+        path.lineTo(445.0f, 855.115f);
+        path.lineTo(775.0f, 505.295f);
+        path.lineTo(565.0f, 375.765f);
+        path.lineTo(525.0f, 905.265f);
+        path.lineTo(10085.0f, 145.295f);
+        path.lineTo(525.0f, 625.765f);
+        path.lineTo(985.0f, 225.745f);
+        path.lineTo(705.0f, 745.665f);
+        path.lineTo(745.0f, 665.145f);
+        path.lineTo(655.0f, 895.35f);
+        path.lineTo(775.0f, 85.115f);
+        path.lineTo(575.0f, 325.585f);
+        path.lineTo(665.0f, 335.55f);
+        path.lineTo(255.0f, 785.55f);
+        path.lineTo(485.0f, 35.425f);
+        path.lineTo(275.0f, 435.135f);
+        path.lineTo(395.0f, 105.365f);
+        path.lineTo(505.0f, 595.515f);
+        path.lineTo(15.0f, 505.435f);
+        path.lineTo(665.0f, 965.865f);
+        path.lineTo(945.0f, 895.685f);
+        path.lineTo(615.0f, 465.905f);
+        path.lineTo(285.0f, 225.365f);
+        path.lineTo(765.0f, 635.935f);
+        path.lineTo(445.0f, 215.385f);
+        path.lineTo(125.0f, 875.515f);
+        path.lineTo(915.0f, 665.25f);
+        path.lineTo(405.0f, 395.155f);
+        path.lineTo(405.0f, 295.505f);
+        path.lineTo(275.0f, 355.185f);
+        path.lineTo(185.0f, 855.205f);
+        path.lineTo(295.0f, 625.445f);
+        path.lineTo(255.0f, 905.705f);
+        path.lineTo(295.0f, 415.585f);
+        path.lineTo(335.0f, 125.235f);
+        path.lineTo(435.0f, 745.575f);
+        path.lineTo(155.0f, 75.205f);
+        path.lineTo(965.0f, 395.985f);
+        path.lineTo(855.0f, 645.15f);
+        path.lineTo(515.0f, 105.495f);
+        path.lineTo(435.0f, 805.345f);
+        path.lineTo(305.0f, 115.975f);
+        path.lineTo(165.0f, 655.325f);
+        path.lineTo(355.0f, 545.235f);
+        path.lineTo(765.0f, 455.85f);
+        path.lineTo(795.0f, 885.725f);
+        path.lineTo(265.0f, 675.915f);
+        path.lineTo(15.0f, 405.465f);
+        path.lineTo(615.0f, 365.925f);
+        path.lineTo(115.0f, 155.735f);
+        path.lineTo(375.0f, 975.935f);
+        path.lineTo(465.0f, 825.565f);
+        path.lineTo(285.0f, 435.665f);
+        path.lineTo(185.0f, 115.785f);
+        path.lineTo(85.0f, 435.15f);
+        path.lineTo(275.0f, 205.15f);
+        path.lineTo(935.0f, 365.655f);
+        path.lineTo(285.0f, 785.195f);
+        path.lineTo(375.0f, 575.65f);
+        path.lineTo(175.0f, 545.435f);
+        path.lineTo(375.0f, 125.635f);
+        path.lineTo(875.0f, 65.565f);
+        path.lineTo(10085.0f, 215.225f);
+        path.lineTo(745.0f, 795.885f);
+        path.lineTo(305.0f, 625.855f);
+        path.lineTo(355.0f, 775.395f);
+        path.lineTo(885.0f, 555.595f);
+        path.lineTo(875.0f, 235.95f);
+        path.lineTo(725.0f, 735.435f);
+        path.lineTo(685.0f, 925.905f);
+        path.lineTo(415.0f, 965.75f);
+        path.lineTo(635.0f, 595.585f);
+        path.lineTo(505.0f, 605.915f);
+        path.lineTo(165.0f, 145.75f);
+        path.lineTo(5.0f, 855.335f);
+        path.lineTo(255.0f, 515.545f);
+        path.lineTo(795.0f, 665.415f);
+        path.lineTo(365.0f, 335.925f);
+        path.lineTo(5.0f, 515.185f);
+        path.lineTo(935.0f, 395.10086f);
+        path.lineTo(5.0f, 35.05f);
+        path.lineTo(865.0f, 865.385f);
+        path.lineTo(545.0f, 435.375f);
+        path.lineTo(695.0f, 965.615f);
+        path.lineTo(755.0f, 535.525f);
+        path.lineTo(455.0f, 445.135f);
+        path.lineTo(765.0f, 685.125f);
+        path.lineTo(835.0f, 915.495f);
+        path.lineTo(895.0f, 575.695f);
+        path.lineTo(725.0f, 725.215f);
+        path.lineTo(455.0f, 815.705f);
+        path.lineTo(515.0f, 205.975f);
+        path.lineTo(935.0f, 655.915f);
+        path.lineTo(855.0f, 945.625f);
+        path.lineTo(535.0f, 405.145f);
+        path.lineTo(605.0f, 535.915f);
+        path.lineTo(945.0f, 355.715f);
+        path.lineTo(465.0f, 475.65f);
+        path.lineTo(815.0f, 505.265f);
+        path.lineTo(85.0f, 405.335f);
+        path.lineTo(45.0f, 135.775f);
+        path.lineTo(705.0f, 145.205f);
+        path.lineTo(555.0f, 775.975f);
+        path.lineTo(535.0f, 955.375f);
+        path.lineTo(875.0f, 125.325f);
+        path.lineTo(695.0f, 665.405f);
+        path.lineTo(815.0f, 685.335f);
+        path.lineTo(835.0f, 85.65f);
+        path.lineTo(5.0f, 915.325f);
+        path.lineTo(505.0f, 205.905f);
+        path.lineTo(795.0f, 955.605f);
+        path.lineTo(355.0f, 145.715f);
+        path.lineTo(765.0f, 45.115f);
+        path.lineTo(435.0f, 15.255f);
+        path.lineTo(865.0f, 385.265f);
+        path.lineTo(905.0f, 995.205f);
+        path.lineTo(475.0f, 585.405f);
+        path.lineTo(835.0f, 355.285f);
+        path.lineTo(635.0f, 935.965f);
+        path.lineTo(25.0f, 595.15f);
+        path.lineTo(305.0f, 145.205f);
+        path.lineTo(725.0f, 205.55f);
+        path.lineTo(415.0f, 815.965f);
+        path.lineTo(805.0f, 265.375f);
+        path.lineTo(265.0f, 695.835f);
+        path.lineTo(375.0f, 55.345f);
+        path.lineTo(525.0f, 135.905f);
+        path.lineTo(495.0f, 955.375f);
+        path.lineTo(505.0f, 525.685f);
+        path.lineTo(275.0f, 65.525f);
+        path.lineTo(525.0f, 375.65f);
+        path.lineTo(625.0f, 855.545f);
+        path.lineTo(75.0f, 25.615f);
+        path.lineTo(5.0f, 985.485f);
+        path.lineTo(825.0f, 565.875f);
+        path.lineTo(535.0f, 235.495f);
+        path.lineTo(905.0f, 785.505f);
+        path.lineTo(685.0f, 25.55f);
+        path.lineTo(25.0f, 15.45f);
+        path.lineTo(295.0f, 565.85f);
+        path.lineTo(995.0f, 845.575f);
+        path.lineTo(155.0f, 825.965f);
+        path.lineTo(145.0f, 645.375f);
+        path.lineTo(745.0f, 165.515f);
+        path.lineTo(705.0f, 835.985f);
+        path.lineTo(10085.0f, 285.945f);
+        path.lineTo(665.0f, 955.955f);
+        path.lineTo(155.0f, 705.215f);
+        path.lineTo(275.0f, 385.495f);
+        path.close();
+    }
+
+    @Override // android.graphics.drawable.ShapeDrawable, android.graphics.drawable.Drawable
+    public void draw(Canvas canvas) {
+        if (this.bounds == null) {
+            return;
+        }
+        canvas.save();
+        canvas.scale(r0.width() / 1008.0f, this.bounds.height() / 1008.0f);
+        canvas.drawPath(this.path, this.paint);
+        canvas.restore();
+    }
+
+    @Override // android.graphics.drawable.ShapeDrawable, android.graphics.drawable.Drawable
+    public void onBoundsChange(Rect bounds) {
+        super.onBoundsChange(bounds);
+        this.bounds = bounds;
+    }
+}

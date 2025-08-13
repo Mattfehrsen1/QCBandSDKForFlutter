@@ -18,6 +18,7 @@ import '../utils/extra.dart';
 import 'package:qc_band_sdk_for_flutter/qc_band_sdk_for_flutter.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/blood_oxygen_entity.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/sleepModel.dart';
+import 'package:qc_band_sdk_for_flutter/bean/models/alarm.dart';
 
 class DeviceScreen extends StatefulWidget {
   final BluetoothDevice device;
@@ -195,6 +196,18 @@ class _DeviceScreenState extends State<DeviceScreen> {
       }
     } catch (e) {
       print('Error discovering services: $e');
+    }
+  }
+
+  // ======== Alarm UI state ========
+  int _alarmIndex = 0;
+  TimeOfDay _alarmTime = const TimeOfDay(hour: 7, minute: 30);
+  List<bool> _alarmRepeat = [false, true, true, true, true, true, false]; // Su..Sa
+
+  Future<void> _pickAlarmTime() async {
+    final picked = await showTimePicker(context: context, initialTime: _alarmTime);
+    if (picked != null) {
+      setState(() => _alarmTime = picked);
     }
   }
 
@@ -879,6 +892,28 @@ class _DeviceScreenState extends State<DeviceScreen> {
     return hrvDataSegment;
   }
 
+  // ================= Pretty log helpers =================
+  String _repeatDaysToShort(List<bool> days) {
+    const labels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    final on = <String>[];
+    for (int i = 0; i < 7 && i < days.length; i++) {
+      if (days[i]) on.add(labels[i]);
+    }
+    return on.isEmpty ? 'none' : on.join(',');
+  }
+
+  String _formatAlarmParsed(Map<String, dynamic> parsed) {
+    final data = parsed['data'] as Map?;
+    if (data == null) return 'Alarm: <no data>';
+    final idx = data['index'];
+    final en = data['enabled'];
+    final h = data['hour'];
+    final m = data['minute'];
+    final days = (data['days'] is List) ? List<bool>.from(data['days']) : List<bool>.filled(7, false);
+    final time = '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+    return 'Alarm[$idx] enabled=$en time=$time repeat=${_repeatDaysToShort(days)}';
+  }
+
   // Step Data of Today
   liveHeartRate() async {
     // Today
@@ -1174,24 +1209,69 @@ class _DeviceScreenState extends State<DeviceScreen> {
     });
   }
 
-  getAlarms() async {
-    final List<int> command = QCBandSDK.getAlarms();
-    try {
-      await _secondbluetoothCharacteristicWrite!.write(
-        command,
-      );
-    } catch (e) {
-      print("Error sending pressure request: $e");
-    }
-    _secondbluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print('Received notification: $value');
-      if (value.isNotEmpty) {
-        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
-        // print(recievedHRVData);
-        log('Received Alarms : $value}');
+  Future<Map<String, dynamic>> _fetchAlarmByIndex(int index) async {
+    final completer = Completer<Map<String, dynamic>>();
+    late final StreamSubscription<List<int>> sub;
+    sub = _bluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isNotEmpty && value[0] == QcBandSdkConst.cmdGetAlarmClockInt && value.length > 1 && value[1] == index) {
+        try {
+          final parsed = QCBandSDK.DataParsingWithData(value);
+          completer.complete(Map<String, dynamic>.from(parsed));
+        } catch (e) {
+          completer.complete({});
+        } finally {
+          sub.cancel();
+        }
       }
     });
+    try {
+      final cmd = QCBandSDK.buildGetAlarmClassic(index);
+      log('[ALARM] → READ idx=$index  cmd=${cmd.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+      await _bluetoothCharacteristicWrite.write(cmd);
+    } catch (e) {
+      sub.cancel();
+      rethrow;
+    }
+    return completer.future.timeout(const Duration(seconds: 3), onTimeout: () {
+      sub.cancel();
+      return {};
+    });
+  }
+
+  getAlarms() async {
+    final List<Map<String, dynamic>> results = [];
+    for (int i = 0; i <= 4; i++) {
+      try {
+        final r = await _fetchAlarmByIndex(i);
+        if (r.isNotEmpty) results.add(r);
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+    if (results.isEmpty) {
+      log('[ALARM] No alarms returned');
+    } else {
+      for (final r in results) {
+        log('[ALARM] ← ${_formatAlarmParsed(r)}');
+      }
+    }
+  }
+
+  setSampleAlarm() async {
+    final alarm = Alarm(
+      index: 0,
+      enabled: true,
+      hour: 7,
+      minute: 30,
+      repeatDays: const [false, true, true, true, true, true, false], // Mon-Fri
+    );
+    final cmd = QCBandSDK.buildSetAlarmClassic(alarm);
+    log('[ALARM] → SET ${alarm.index} ${alarm.hour.toString().padLeft(2,'0')}:${alarm.minute.toString().padLeft(2,'0')} repeat=${_repeatDaysToShort(alarm.repeatDays)}  cmd=${cmd.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+    try {
+      await _bluetoothCharacteristicWrite.write(cmd);
+      Snackbar.show(ABC.c, "Set alarm sent", success: true);
+    } catch (e) {
+      Snackbar.show(ABC.c, prettyException("Set alarm error:", e), success: false);
+    }
   }
 
   @override
@@ -1369,9 +1449,65 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 onPressed: getAlarms,
                 child: Text('Get Alarm'),
               ),
-              TextButton(
-                onPressed: () {},
-                child: Text('Set Alarm'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Text('Alarm Index:'),
+                      const SizedBox(width: 8),
+                      DropdownButton<int>(
+                        value: _alarmIndex,
+                        items: const [
+                          DropdownMenuItem(value: 0, child: Text('0')),
+                          DropdownMenuItem(value: 1, child: Text('1')),
+                          DropdownMenuItem(value: 2, child: Text('2')),
+                          DropdownMenuItem(value: 3, child: Text('3')),
+                          DropdownMenuItem(value: 4, child: Text('4')),
+                        ],
+                        onChanged: (v) => setState(() => _alarmIndex = v ?? 0),
+                      ),
+                      const SizedBox(width: 16),
+                      Text('Time: ${_alarmTime.format(context)}'),
+                      const SizedBox(width: 8),
+                      TextButton(onPressed: _pickAlarmTime, child: const Text('Pick Time')),
+                    ]),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: List.generate(7, (i) {
+                        const labels = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+                        return FilterChip(
+                          label: Text(labels[i]),
+                          selected: _alarmRepeat[i],
+                          onSelected: (sel) => setState(() => _alarmRepeat[i] = sel),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final alarm = Alarm(
+                          index: _alarmIndex,
+                          enabled: true,
+                          hour: _alarmTime.hour,
+                          minute: _alarmTime.minute,
+                          repeatDays: List<bool>.from(_alarmRepeat),
+                        );
+                        final cmd = QCBandSDK.buildSetAlarmClassic(alarm);
+                        log('[ALARM] → SET ${alarm.index} ${alarm.hour.toString().padLeft(2,'0')}:${alarm.minute.toString().padLeft(2,'0')} repeat=${_repeatDaysToShort(alarm.repeatDays)}  cmd=${cmd.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+                        try {
+                          await _bluetoothCharacteristicWrite.write(cmd);
+                          Snackbar.show(ABC.c, 'Set alarm sent', success: true);
+                        } catch (e) {
+                          Snackbar.show(ABC.c, prettyException('Set alarm error:', e), success: false);
+                        }
+                      },
+                      child: const Text('Set Alarm'),
+                    ),
+                  ],
+                ),
               ),
               TextButton(
                 onPressed: startWorkOut,

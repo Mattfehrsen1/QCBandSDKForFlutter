@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_selected="true"
+        android:color="@color/watch_face_common_1"/>
+    <item android:color="@color/watch_face_common_2"/>
+</selector>

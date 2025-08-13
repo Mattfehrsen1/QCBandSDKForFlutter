@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@color/color_F9F9F9"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/qc_dp_10"
+    android:layout_marginBottom="@dimen/qc_dp_10"
+    android:minHeight="@dimen/qc_dp_48">
+    <TextView
+        android:textSize="@dimen/qc_sp_12"
+        android:textColor="@color/rcv_item_watch_face_tv"
+        android:ellipsize="marquee"
+        android:gravity="center"
+        android:id="@+id/tv_tag"
+        android:padding="@dimen/qc_dp_10"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="@dimen/qc_dp_80"
+        android:minWidth="@dimen/qc_dp_60"
+        android:singleLine="true"
+        android:marqueeRepeatLimit="marquee_forever"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

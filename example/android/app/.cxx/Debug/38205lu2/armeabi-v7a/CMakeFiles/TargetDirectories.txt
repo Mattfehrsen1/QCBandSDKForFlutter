@@ -1,0 +1,2 @@
+/Users/matthewfehrsen/Desktop/QCBandSDKForFlutter-main/example/android/app/.cxx/Debug/38205lu2/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/matthewfehrsen/Desktop/QCBandSDKForFlutter-main/example/android/app/.cxx/Debug/38205lu2/armeabi-v7a/CMakeFiles/rebuild_cache.dir

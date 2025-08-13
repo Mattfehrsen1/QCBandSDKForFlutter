@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@color/color_F9F9F9"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <include
+        android:id="@+id/titleBar"
+        layout="@layout/layout_title_bar"/>
+    <EditText
+        android:theme="@style/MyEditText"
+        android:textColor="@color/login_common_1"
+        android:textColorHint="@color/login_edit_hint"
+        android:gravity="center"
+        android:id="@+id/user_phone"
+        android:background="@color/color_FFFFFF"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:hint="@string/qc_text_605"
+        android:cursorVisible="true"
+        android:inputType="phone"
+        android:textCursorDrawable="@drawable/edit_view_cursor"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

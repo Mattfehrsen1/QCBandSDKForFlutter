@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'utils/qc_band_sdk_const.dart';
 import 'utils/resolve_util.dart';
+import 'bean/models/alarm.dart';
 
 class QCBandSDK {
   static const int DATAREADSTART = 0;
@@ -174,8 +175,10 @@ class QCBandSDK {
       //   return ResolveUtil.MCUReset();
       // case DeviceConst.CMD_Notify:
       //   return ResolveUtil.Notify();
-      // case DeviceConst.CMD_Get_ActivityAlarm:
-      //   return ResolveUtil.getActivityAlarm(value);
+      case QcBandSdkConst.cmdGetAlarmClockInt:
+        final res = ResolveUtil.getClockData(value);
+        print('[ALARM] parse ← index=${res['data']?['index']} enabled=${res['data']?['enabled']} time=${res['data']?['hour']}:${res['data']?['minute']}');
+        return res;
       // case DeviceConst.CMD_Get_TotalData:
       //   return ResolveUtil.getTotalStepData(value);
       // case DeviceConst.CMD_Get_DetailData:
@@ -316,6 +319,31 @@ class QCBandSDK {
       //   break;
     }
     return ResolveUtil.setMethodError(_getBcdValue(value[0]).toString());
+  }
+
+  // ================= Alarms (classic 0x23/0x24) =================
+  static Uint8List buildSetAlarmClassic(Alarm alarm) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdSetAlarmClockInt; // 35
+    value[1] = alarm.index & 0xFF;
+    value[2] = alarm.enabled ? 1 : 0;
+    // hour/minute in BCD per classic format
+    value[3] = ResolveUtil().decimalToBCD(alarm.hour);
+    value[4] = ResolveUtil().decimalToBCD(alarm.minute);
+    // Seven bytes for Sun..Sat (0/1)
+    for (int i = 0; i < 7; i++) {
+      value[5 + i] = (alarm.repeatDays[i] ? 1 : 0);
+    }
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List buildGetAlarmClassic(int index) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdGetAlarmClockInt; // 36
+    value[1] = index & 0xFF;
+    _crcValue(value);
+    return Uint8List.fromList(value);
   }
 
   static Uint8List runDeviceCallibration(int type) {

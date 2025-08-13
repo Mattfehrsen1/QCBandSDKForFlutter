@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginLeft="@dimen/qc_dp_26"
+    android:layout_marginRight="@dimen/qc_dp_26"
+    android:minHeight="@dimen/qc_dp_60">
+    <ImageView
+        android:id="@+id/img_soft"
+        android:layout_width="25dp"
+        android:layout_height="25dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+    <TextView
+        android:textColor="@color/rcv_item_msg_push_common_1"
+        android:id="@+id/rcv_software_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="@dimen/qc_dp_12"
+        android:maxWidth="@dimen/qc_dp_200"
+        app:layout_constraintBottom_toBottomOf="@+id/img_soft"
+        app:layout_constraintLeft_toRightOf="@+id/img_soft"
+        app:layout_constraintTop_toTopOf="@+id/img_soft"/>
+    <ImageView
+        android:layout_gravity="center"
+        android:id="@+id/right_switch"
+        android:background="@null"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="@+id/img_soft"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/img_soft"/>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

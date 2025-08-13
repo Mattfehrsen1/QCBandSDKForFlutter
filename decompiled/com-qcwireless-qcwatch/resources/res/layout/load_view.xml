@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <com.qcwireless.qcwatch.ui.base.view.ShapeLoadingView
+        android:layout_gravity="center_horizontal"
+        android:id="@+id/shapeLoadingView"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginTop="2dp"/>
+    <ImageView
+        android:layout_gravity="center_horizontal"
+        android:id="@+id/indication"
+        android:layout_width="23dp"
+        android:layout_height="3dp"
+        android:layout_marginTop="56dp"
+        android:src="@drawable/shadow"/>
+    <TextView
+        android:textSize="14sp"
+        android:textColor="@color/load_view_1"
+        android:layout_gravity="center_horizontal"
+        android:id="@+id/promptTV"
+        android:visibility="gone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"/>
+</merge>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval"
+    android:useLevel="false">
+    <size
+        android:height="8dp"
+        android:width="8dp"/>
+    <gradient
+        android:startColor="@color/device_scan_anim_start"
+        android:endColor="@color/device_scan_anim_end"
+        android:angle="0"
+        android:type="radial"
+        android:gradientRadius="180"
+        android:centerColor="@color/device_scan_anim_start"/>
+</shape>

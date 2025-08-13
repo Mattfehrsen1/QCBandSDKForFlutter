@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <include
+        android:id="@+id/titleBar"
+        layout="@layout/layout_title_bar"/>
+    <ImageView
+        android:id="@+id/image_no_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@mipmap/album_no_image"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/titleBar"/>
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcv_image"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@+id/btn_select_pic"
+        app:layout_constraintTop_toBottomOf="@+id/titleBar"/>
+    <Button
+        android:enabled="true"
+        android:textColor="@color/login_btn_text_color"
+        android:id="@+id/btn_select_pic"
+        android:background="@drawable/sel_btn_user_center"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="@dimen/qc_dp_26"
+        android:layout_marginTop="@dimen/qc_dp_80"
+        android:layout_marginRight="@dimen/qc_dp_26"
+        android:layout_marginBottom="@dimen/qc_dp_30"
+        android:minHeight="@dimen/qc_dp_48"
+        android:text="@string/qc_text_580"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:textAllCaps="false"/>
+</androidx.constraintlayout.widget.ConstraintLayout>
