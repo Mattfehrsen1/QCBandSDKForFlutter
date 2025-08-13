@@ -35,6 +35,40 @@ class ResolveUtil {
     return results;
   }
 
+  /// Parse classic alarm read (0x24) response into a simple map
+  /// Best-effort based on classic layout: [36, index, enable, hourBCD, minBCD, d0..d6]
+  /// Returns: { type: 'alarm', index, enabled, hour, minute, days: [bool x7] }
+  static Map<String, dynamic> getClockData(List<int> value) {
+    try {
+      final int index = value.length > 1 ? (value[1] & 0xFF) : 0;
+      final int enableByte = value.length > 2 ? (value[2] & 0xFF) : 0;
+      final bool enabled = enableByte != 0;
+      final String hourStr = value.length > 3 ? _bcd2String(value[3]) : '00';
+      final String minStr = value.length > 4 ? _bcd2String(value[4]) : '00';
+      final int hour = int.tryParse(hourStr) ?? 0;
+      final int minute = int.tryParse(minStr) ?? 0;
+      final List<bool> days = List<bool>.generate(7, (i) {
+        final int pos = 5 + i;
+        return value.length > pos ? (value[pos] & 0xFF) != 0 : false;
+      });
+      return {
+        'dataType': 'GetAlarmClock',
+        'end': true,
+        'data': {
+          'index': index,
+          'enabled': enabled,
+          'hour': hour,
+          'minute': minute,
+          'days': days,
+          'raw': value,
+        }
+      };
+    } catch (e) {
+      final err = setMethodError('alarm_parse_error: $e');
+      return Map<String, dynamic>.from(err);
+    }
+  }
+
   static String intList2String(List<int> bytes) {
     String data = '';
     bytes.forEach((element) {

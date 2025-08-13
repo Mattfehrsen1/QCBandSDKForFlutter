@@ -53,6 +53,9 @@ class QcBandSdkConst {
   static const String cmdGetStepTotalSomeday = '7';
   static const String cmdSetAlarmClock = '35';
   static const String cmdGetAlarmClock = '36';
+  // Int variants for parsing and building classic 16-byte commands
+  static const int cmdSetAlarmClockInt = 35;
+  static const int cmdGetAlarmClockInt = 36;
   static const String cmdDeviceRevision = '-95';
   static const String cmdSetSitLong = '37';
   static const String cmdGetSitLong = '38';

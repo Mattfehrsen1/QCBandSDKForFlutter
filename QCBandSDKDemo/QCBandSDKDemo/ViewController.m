@@ -20,7 +20,8 @@
 #import <QCBandSDK/QCDimingTimeInfo.h>
 #import <QCBandSDK/QCStressModel.h>
 #import <QCBandSDK/QCSedentaryModel.h>
-
+#import <QCBandSDK/QCBloodPressureModel.h> // Import your QCBloodPressureModel header
+#import <QCBandSDK/QCAlarmModel.h>
 typedef NS_ENUM(NSInteger, QCFeatureType) {
     QCFeatureTypeAlertBinding = 0,              //Bind Notification(绑定通知)
     QCFeatureTypeSetTime,                       //Set Watch Time(设置手表时间)
@@ -245,16 +246,24 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
     {
         NSLog(@"Set personal information successfully");
         
-        [QCSDKCmdCreator getTimeFormatInfo:^(BOOL isTwentyfour, BOOL isMetricSystem, NSInteger gender, NSInteger age, NSInteger height, NSInteger weight, NSInteger sbpBase, NSInteger dbpBase, NSInteger hrAlarmValue) {
-            NSLog(@"isTwentyfour:%d, isMetricSystem:%d",isTwentyfour,isMetricSystem);
-        } fail:^{
-            
-        }];
+//        [QCSDKCmdCreator getTimeFormatInfo:^(BOOL isTwentyfour, BOOL isMetricSystem, NSInteger gender, NSInteger age, NSInteger height, NSInteger weight, NSInteger sbpBase, NSInteger dbpBase, NSInteger hrAlarmValue) {
+//            NSLog(@"isTwentyfour:%d, isMetricSystem:%d",isTwentyfour,isMetricSystem);
+//        } fail:^{
+//            
+//        }];
         
         
     } fail:^{
         NSLog(@"Failed to set personal information");
     }];
+//    NSLog(@"Get personal information");
+//    [QCSDKCmdCreator getTimeFormatInfo:^(BOOL isTwentyfour, BOOL isMetricSystem, NSInteger gender, NSInteger age, NSInteger height, NSInteger weight, NSInteger sbpBase, NSInteger dbpBase, NSInteger hrAlarmValue) {
+//        NSLog(@"isTwentyfour:%d, isMetricSystem:%d", isTwentyfour, isMetricSystem);
+//        NSLog(@"Gender:%ld, Age:%ld, Height:%ld, Weight:%ld", (long)gender, (long)age, (long)height, (long)weight);
+//        NSLog(@"SBP Base:%ld, DBP Base:%ld, HR Alarm Value:%ld", (long)sbpBase, (long)dbpBase, (long)hrAlarmValue);
+//    } fail:^{
+//        NSLog(@"Failed to get personal information.");
+//    }];
 }
 
 
@@ -265,6 +274,14 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
     } fail:^{
         NSLog(@"Failed to get firmware information");
     }];
+//    NSLog(@"Get personal information");
+//    [QCSDKCmdCreator getTimeFormatInfo:^(BOOL isTwentyfour, BOOL isMetricSystem, NSInteger gender, NSInteger age, NSInteger height, NSInteger weight, NSInteger sbpBase, NSInteger dbpBase, NSInteger hrAlarmValue) {
+//        NSLog(@"isTwentyfour:%d, isMetricSystem:%d", isTwentyfour, isMetricSystem);
+//        NSLog(@"Gender:%ld, Age:%ld, Height:%ld, Weight:%ld", (long)gender, (long)age, (long)height, (long)weight);
+//        NSLog(@"SBP Base:%ld, DBP Base:%ld, HR Alarm Value:%ld", (long)sbpBase, (long)dbpBase, (long)hrAlarmValue);
+//    } fail:^{
+//        NSLog(@"Failed to get personal information.");
+//    }];
 }
 
 - (void)getPower {
@@ -284,24 +301,251 @@ static NSInteger const kQCHoldRealTimeHeartRateTimeout = 20;
 }
 
 - (void)getSleep {
-    NSLog(@"Get sleep data");
+//    NSLog(@"Get sleep data");
     //7 days
     //dayIndex: 0-6,0:today,1:yesterday ...
-    [QCSDKCmdCreator getSleepDetailDataByDay:0 sleepDatas:^(NSArray<QCSleepModel *> * _Nonnull sleeps) {
-        NSLog(@"Get sleep data successfully");
-        
-        for (QCSleepModel *sleep in sleeps) {
-            NSLog(@"Start Time:%@,End Tile:%@,duration:%ld,type:%ld",sleep.happenDate,sleep.endTime,sleep.total,sleep.type);
-        }
-        
-        NSInteger total = [QCSleepModel sleepDuration:sleeps];
-        
-        NSLog(@"total duration：%ldh%ldm",total/60,total%60);
-    } fail:^{
-        NSLog(@"Failed to get sleep");
-    }];
-}
+    //    [QCSDKCmdCreator getSleepDetailDataByDay:6 sleepDatas:^(NSArray<QCSleepModel *> * _Nonnull sleeps) {
+    //        NSLog(@"Get sleep data successfully");
+    //
+    //        for (QCSleepModel *sleep in sleeps) {
+    //            NSLog(@"Start Time:%@,End Tile:%@,duration:%ld,type:%ld",sleep.happenDate,sleep.endTime,sleep.total,sleep.type);
+    //        }
+    //
+    //        NSInteger total = [QCSleepModel sleepDuration:sleeps];
+    //
+    //        NSLog(@"total duration：%ldh%ldm",total/60,total%60);
+    //    } fail:^{
+    //        NSLog(@"Failed to get sleep");
+    //    }];
+    //    [QCSDKCmdCreator getSleepDetailDataByDay:5 sleepDatas:^(NSArray<QCSleepModel *> * _Nonnull sleeps) {
+    //        NSLog(@"Get sleep data successfully");
+    //
+    //        for (QCSleepModel *sleep in sleeps) {
+    //            NSLog(@"Start Time:%@,End Tile:%@,duration:%ld,type:%ld",sleep.happenDate,sleep.endTime,sleep.total,sleep.type);
+    //        }
+    //
+    //        NSInteger total = [QCSleepModel sleepDuration:sleeps];
+    //
+    //        NSLog(@"total duration：%ldh%ldm",total/60,total%60);
+    //    } fail:^{
+    //        NSLog(@"Failed to get sleep");
+    //    }];
+    //    [QCSDKCmdCreator getSchedualBPHistoryDataWithSuccess:^(NSArray<QCBloodPressureModel *> *data) {
+    //         // This block will be executed if the data retrieval is successful
+    //         NSLog(@"Successfully retrieved blood pressure data. Number of records: %lu", (unsigned long)data.count);
+    //
+    //         for (QCBloodPressureModel *bpModel in data) {
+    //             // Process each QCBloodPressureModel object
+    //             NSLog(@"Blood Pressure Record - Systolic: %ld, Diastolic: %ld, Time: %@",
+    //                   (long)bpModel.systolicPressure, (long)bpModel.diastolicPressure, bpModel.date);
+    //             // Access other properties of QCBloodPressureModel as needed
+    //         }
+    //
+    //     } fail:^{
+    //         // This block will be executed if the data retrieval fails
+    //         NSLog(@"Failed to retrieve blood pressure data.");
+    //     }];
+//  NSInteger currentUserAge = 18; // Replace with the actual user's age
+//////    
+//////    // 2. Call the SDK function
+//    [QCSDKCmdCreator getSchedualBPHistoryDataWithUserAge:currentUserAge
+//                                                 success:^(NSArray<QCBloodPressureModel *> *data) {
+//        // This block is executed if the data retrieval is successful
+//        NSLog(@"Successfully retrieved %lu blood pressure records.", (unsigned long)data.count);
+//        
+//        if (data.count > 0) {
+//            for (QCBloodPressureModel *bpModel in data) {
+//                // Process each BloodPressureModel object
+//                NSLog(@"BP Record: Systolic=%ld, Diastolic=%ld, Timestamp=%@",
+//                      (long)bpModel.systolicPressure, (long)bpModel.diastolicPressure, bpModel.date);
+//                
+//                // You can now use this data to display in your UI, save to a database, etc.
+//                // Example: Update a UITableView or UICollectionView
+//            }
+//        } else {
+//            NSLog(@"No blood pressure data found for user age %ld.", (long)currentUserAge);
+//        }
+//        
+//    } fail:^{
+//        // This block is executed if the data retrieval fails
+//        NSLog(@"Failed to retrieve blood pressure data.");
+//        // Inform the user about the failure (e.g., show an alert)
+//    }];
+    
+//        BOOL enableMeasurement = YES; // Set to YES to turn the timed measurement ON, NO to turn it OFF
+//         NSString *startTime = @"00:00"; // Measurement starts at 8:00 AM
+//         NSString *endTime = @"24:00";   // Measurement ends at 10:00 PM (22:00)
+//         NSInteger desiredIntervalMinutes = 30; // Set the interval to 30 minutes
+//    
+//         [QCSDKCmdCreator setSchedualBPInfoOn:enableMeasurement
+//                                    beginTime:startTime
+//                                      endTime:endTime
+//                               minuteInterval:desiredIntervalMinutes
+//                                      success:^(BOOL featureOn, NSString *beginTime, NSString *endTime, NSInteger minuteInterval) {
+//             // This block is executed if the setting is successful
+//             NSLog(@"Successfully set timed BP measurement info.");
+//             NSLog(@"Feature On: %@, Begin Time: %@, End Time: %@, Interval: %ld minutes",
+//                   featureOn ? @"YES" : @"NO", beginTime, endTime, (long)minuteInterval);
+//    
+////     You might want to update your UI to reflect the new settings or show a success message.
+//         } fail:^{
+//             // This block is executed if the setting fails
+//             NSLog(@"Failed to set timed BP measurement info.");
+//             // Inform the user about the failure
+//         }];
+    //}
+    //- (void)fetchBloodPressureDataForCurrentUser {
+    //    // 1. Get the user's age. This would typically come from your app's user profile,
+    //    //    user defaults, or a login system.
+    //
+    //}
+    // Assuming this method belongs to a class named 'YourSDKClassName' or similar
+    // Replace 'YourSDKClassName' with the actual class name where this method is defined.
+//
+//    [QCSDKCmdCreator getSchedualBPInfo:^(BOOL featureOn, NSString *beginTime, NSString *endTime, NSInteger minuteInterval) {
+//        // This is the 'success' block, executed when the function successfully retrieves the information.
+//        // The parameters contain the details about the scheduled blood pressure measurement.
+//
+//        if (featureOn) {
+//            NSLog(@"Timed BP Measurement Feature is ON.");
+//            NSLog(@"Begin Time: %@", beginTime);
+//            NSLog(@"End Time: %@", endTime);
+//            NSLog(@"Measurement Interval: %ld minutes", (long)minuteInterval);
+//        } else {
+//            NSLog(@"Timed BP Measurement Feature is OFF.");
+//            // If featureOn is NO, beginTime, endTime, and minuteInterval might not be relevant or could be default values.
+//            // You might want to handle this case specifically based on the SDK's behavior.
+//        }
+//
+//    } fail:^{
+//        // This is the 'fail' block, executed if there's an error or the information cannot be retrieved.
+//        NSLog(@"Failed to get timed BP measurement information.");
+//        // You can add error handling here, e.g., show an alert to the user.
+//    }];
+    // --- Example 1: Turning the feature ON and setting a schedule ---
+//    BOOL enableFeature = YES;
+//    NSString *startTime = @"00:00"; // Example: Start at 8:00 AM
+//    NSString *finishTime = @"24:00"; // Example: End at 10:00 PM
+//    NSInteger intervalMinutes = 30;  // Example: Measure every 30 minutes
+//
+//    [QCSDKCmdCreator setSchedualBPInfoOn:enableFeature
+//                                 beginTime:startTime
+//                                   endTime:finishTime
+//                            minuteInterval:intervalMinutes
+//                                   success:^(BOOL featureOn, NSString *beginTime, NSString *endTime, NSInteger minuteInterval) {
+//        // This 'success' block is called if the settings were applied successfully.
+//        // The parameters here usually reflect the settings that were just applied, or the current state after the operation.
+//        NSLog(@"Successfully set timed BP measurement schedule!");
+//        NSLog(@"Feature On: %@, Begin Time: %@, End Time: %@, Interval: %ld minutes",
+//              featureOn ? @"YES" : @"NO", beginTime, endTime, (long)minuteInterval);
+//
+//    } fail:^{
+//        // This 'fail' block is called if the operation to set the schedule failed.
+//        NSLog(@"Failed to set timed BP measurement schedule.");
+//        // Handle the failure, e.g., show an error message to the user.
+//    }];
+    // --- How to use the getManualBloodPressureDataWithLastUnixSeconds function ---
 
+    // 1. Define the 'lastUnixSeconds' parameter:
+    //    - Pass 0 or a very small number (e.g., 1) to fetch all available historical data
+    //      (useful for the very first data sync).
+    //    - Pass the Unix timestamp (seconds since 1970) of the *last* blood pressure
+    //      record you already have to fetch only newer data.
+//    NSUInteger lastFetchedTimestamp = 0; // Example: To fetch all data initially
+//
+//    // 2. Call the class method, providing the timestamp and handling success/failure with blocks:
+//    [QCSDKCmdCreator getManualBloodPressureDataWithLastUnixSeconds:lastFetchedTimestamp
+//    success:^(NSArray<QCBloodPressureModel *> *data) {
+//        // This block executes if the data retrieval is successful.
+//        // 'data' is an NSArray containing BloodPressureModel objects.
+//
+//        if (data.count > 0) {
+//            NSLog(@"Successfully retrieved %lu blood pressure records.", (unsigned long)data.count);
+//            for (QCBloodPressureModel *bpRecord in data) {
+//                // Access properties of each BloodPressureModel object, for example:
+//                NSLog(@"BP Record: Systolic=%ld, Diastolic=%ld, Time=%lu",
+//                      (long)bpRecord.systolicPressure, (long)bpRecord.diastolicPressure ,(unsigned long)bpRecord.date);
+//                // You would typically save this data to your app's storage or update the UI.
+//            }
+//            // If needed for subsequent calls, you can get the timestamp of the last record:
+//            // NSUInteger newLastTimestamp = [[data lastObject] timestamp];
+//
+//        } else {
+//            NSLog(@"No new blood pressure data available.");
+//        }
+//
+//    } fail:^{
+//        // This block executes if there was an error during data retrieval.
+//        NSLog(@"Failed to get blood pressure data. Please check connection or permissions.");
+//        // Implement error handling here (e.g., show an alert to the user).
+//    }];
+//    [QCSDKCmdCreator getBandAlarmsWithFinish:^(NSArray<QCAlarmModel *> * _Nullable alarms, NSError * _Nullable error) {
+//         if (error) {
+//             NSLog(@"Failed to get wristband alarms: %@", error.localizedDescription);
+//             // Handle the error (e.g., show an alert to the user)
+//         } else {
+//             if (alarms && alarms.count > 0) {
+//                 NSLog(@"Successfully retrieved %lu alarms:", (unsigned long)alarms.count);
+//                 for (QCAlarmModel *alarm in alarms) {
+//                    
+//                     NSInteger hour = alarm.time / 60;
+//                                      NSInteger minute = alarm.time % 60;
+//
+//                                      NSLog(@"Alarm: Name='%@', Time=%02ld:%02ld, Type=%ld, RepeatDays=%@",
+//                                            alarm.name,
+//                                            (long)hour,
+//                                            (long)minute,
+//                                            (long)alarm.type,
+//                                            alarm.weekDays); // weekDays is already an array of strings
+//                 }
+//             } else {
+//                 NSLog(@"No alarms found on the wristband or successfully retrieved an empty list.");
+//                 // Handle the case where no alarms are set
+//             }
+//         }
+//     }];
+    QCAlarmModel *wakeUpAlarm = [[QCAlarmModel alloc] init];
+        wakeUpAlarm.name = @"Wake Up";
+        // Convert 7:00 AM to minutes from midnight: 7 * 60 = 420
+        wakeUpAlarm.time = 7 * 60;
+        // Assuming ALARMTYPE_GENERAL is a defined enum value in OdmBleConstants.h
+        wakeUpAlarm.type = 1; // Replace with actual ALARMTYPE enum value
+
+        // Weekdays: Sunday=0, Monday=1, ..., Saturday=6
+        // So, Monday to Friday would be indices 1, 2, 3, 4, 5.
+        // The weekDays array expects strings "0" or "1" for each day.
+        // Let's assume weekDays is ordered from Sunday to Saturday.
+        // Example: @[@"0", @"1", @"1", @"1", @"1", @"1", @"0"] for Mon-Fri
+        wakeUpAlarm.weekDays = @[@"0", @"1", @"1", @"1", @"1", @"1", @"0"]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+
+        // --- 2. Create the second alarm: Weekend (Sat-Sun at 10:00 AM) ---
+        QCAlarmModel *weekendAlarm = [[QCAlarmModel alloc] init];
+        weekendAlarm.name = @"Weekend";
+        // Convert 10:00 AM to minutes from midnight: 10 * 60 = 600
+        weekendAlarm.time = 10 * 60;
+        weekendAlarm.type = 2; // Or another appropriate ALARMTYPE
+
+        // Weekend: Sunday=0, Saturday=6
+        weekendAlarm.weekDays = @[@"1", @"0", @"0", @"0", @"0", @"0", @"1"]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+
+        // --- 3. Build the array of alarms ---
+    NSArray<QCAlarmModel *> *alarmsToSet = @[ wakeUpAlarm,weekendAlarm];
+
+        // --- 4. Call setBandAlarms ---
+        [QCSDKCmdCreator setBandAlarms:alarmsToSet finish:^(NSArray * _Nullable successfullySetAlarms, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"Failed to set wristband alarms: %@", error.localizedDescription);
+                // Handle the error (e.g., show an alert to the user)
+            } else {
+                if (successfullySetAlarms) {
+                    NSLog(@"Successfully set alarms. Confirmed alarms: %@", successfullySetAlarms);
+                    // You might want to update your UI to reflect the new alarm state
+                } else {
+                    NSLog(@"Alarms sent, but no confirmation array returned or it was empty.");
+                }
+            }
+        }];
+}
 - (void)getSleepFromDay {
     NSLog(@"Get sleep data");
     [QCSDKCmdCreator getSleepDetailDataFromDay:1 sleepDatas:^(NSDictionary <NSString*,NSArray<QCSleepModel*>*>* _Nonnull sleeps) {

@@ -32,11 +32,34 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 build/
 
-skylot-jadx-0db11e4/
-
-# Ignore decompiled outputs
-decompiled/
-
-# Ignore Android native build outputs
-**/.cxx/
+# Example local build outputs and generated files
+example/**/build/
 example/android/app/.cxx/
+example/ios/Pods/
+example/ios/Podfile.lock
+
+# Android/iOS local configuration
+**/.cxx/
+**/.gradle/
+**/local.properties
+
+# Reverse-engineering artifacts and large binaries
+decompiled/
+skylot-jadx-*/
+*.jadx
+*.apk
+QWatch Pro_*.apk
+QWatch Pro_*.apk.jadx
+
+# Misc
+.metadata
+*.log
+
+# Unnecessary vendor/demo and large binaries not needed for the plugin
+QCBandSDKDemo/
+qc_sdk_*.aar
+
+# Optional docs/samples not required by consumers
+exercise_docmentation_classes/
+sleep_documentation_classes/
+SleepReference/

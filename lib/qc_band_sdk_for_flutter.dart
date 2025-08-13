@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'utils/qc_band_sdk_const.dart';
 import 'utils/resolve_util.dart';
+import 'bean/models/alarm.dart';
 
 class QCBandSDK {
   static const int DATAREADSTART = 0;
@@ -176,8 +177,10 @@ class QCBandSDK {
       //   return ResolveUtil.MCUReset();
       // case DeviceConst.CMD_Notify:
       //   return ResolveUtil.Notify();
-      // case DeviceConst.CMD_Get_ActivityAlarm:
-      //   return ResolveUtil.getActivityAlarm(value);
+      case QcBandSdkConst.cmdGetAlarmClockInt:
+        final res = ResolveUtil.getClockData(value);
+        print('[ALARM] parse ← index=${res['data']?['index']} enabled=${res['data']?['enabled']} time=${res['data']?['hour']}:${res['data']?['minute']}');
+        return res;
       // case DeviceConst.CMD_Get_TotalData:
       //   return ResolveUtil.getTotalStepData(value);
       // case DeviceConst.CMD_Get_DetailData:
@@ -320,6 +323,33 @@ class QCBandSDK {
     return ResolveUtil.setMethodError(_getBcdValue(value[0]).toString());
   }
 
+<<<<<<< HEAD
+  // ================= Alarms (classic 0x23/0x24) =================
+  static Uint8List buildSetAlarmClassic(Alarm alarm) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdSetAlarmClockInt; // 35
+    value[1] = alarm.index & 0xFF;
+    value[2] = alarm.enabled ? 1 : 0;
+    // hour/minute in BCD per classic format
+    value[3] = ResolveUtil().decimalToBCD(alarm.hour);
+    value[4] = ResolveUtil().decimalToBCD(alarm.minute);
+    // Seven bytes for Sun..Sat (0/1)
+    for (int i = 0; i < 7; i++) {
+      value[5 + i] = (alarm.repeatDays[i] ? 1 : 0);
+    }
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List buildGetAlarmClassic(int index) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdGetAlarmClockInt; // 36
+    value[1] = index & 0xFF;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+=======
   // ================= Vendor Serial (0xBC) helpers and Sport+ =================
   // Build vendor packet using ResolveUtil.addHeader
   static Uint8List buildVendorPacket(int cmd, [Uint8List? payload]) {
@@ -600,6 +630,7 @@ class QCBandSDK {
       },
     };
   }
+>>>>>>> origin/main
   static Uint8List runDeviceCallibration(int type) {
     return Uint8List.fromList([0xA1, type]);
   }
@@ -1107,6 +1138,23 @@ class QCBandSDK {
       phoneSport(QcBandSdkConst.ACTION_CONTINUE, sportType: sportType);
   static Uint8List stopWorkOutWithType({int sportType = 4}) =>
       phoneSport(QcBandSdkConst.ACTION_STOP, sportType: sportType);
+
+  static Uint8List getAlarms() {
+    // 0xbc2c01007e8001
+    // 188,44
+    // [188, 42, 1, 0, 255, 0, 255]
+
+    final List<int> value = _generateInitValue();
+    value[0] = 188;
+    value[1] = 44;
+    value[2] = 1;
+    value[3] = 0;
+    value[4] = 126;
+    value[5] = 128;
+    value[6] = 1;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 
   static Uint8List getDetailStepData(
       int dayOffset, int startPoint, int endPoint) {
