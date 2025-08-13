@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert'; // Required for JSON encoding
 import 'dart:developer';
 import 'dart:typed_data'; // Required for Uint8List and ByteData
 import 'dart:core'; // Required for Endian
@@ -19,6 +20,8 @@ import 'package:qc_band_sdk_for_flutter/qc_band_sdk_for_flutter.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/blood_oxygen_entity.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/sleepModel.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/alarm.dart';
+import 'package:qc_band_sdk_for_flutter/utils/resolve_util.dart';
+import 'sports_monitor_page.dart';
 
 class DeviceScreen extends StatefulWidget {
   final BluetoothDevice device;
@@ -49,6 +52,24 @@ class _DeviceScreenState extends State<DeviceScreen> {
   late BluetoothCharacteristic _secondbluetoothCharacteristicNotification;
   // de5bf72a-d711-4e47-af26-65e3012a5dc7
   late BluetoothCharacteristic _secondbluetoothCharacteristicWrite;
+  BluetoothCharacteristic? _hrMeasurementChar; // 2A37
+  BluetoothCharacteristic? _rscMeasurementChar; // 2A53
+  StreamSubscription<List<int>>? _heartRateNotificationSubscription;
+  Timer? _heartRateRepeatingTimer;
+  StreamSubscription<List<int>>? _liveWorkoutSubscription;
+  Timer? _hrKeepAliveTimer;
+  Timer? _sportHeartbeatTimer;
+  int _workoutElapsedSec = 0;
+
+  // Live workout state
+  int _selectedSportType = 7; // default Run
+  int _liveDurationSec = 0;
+  int _liveHr = 0;
+  int _liveSteps = 0;
+  int _liveDistance = 0; // meters
+  int _liveCalories = 0; // calories
+  final List<int> _hrSamples = <int>[]; // accumulating HR samples during workout
+  String _vendorStatus = '';
 
   Future<void> _discoverServicesAndCharacteristics(
       BluetoothDevice device) async {
@@ -119,6 +140,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     _bluetoothCharacteristicNotification = characteristic;
                   });
                   print('Notifications enabled');
+                  _ensureLiveWorkoutListener();
                   // FFAppState().ListenValueCharactertics = characteristic;
                 } catch (e) {
                   print('Error enabling notifications: $e');
@@ -162,6 +184,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   });
                   print(
                       'Notifications enabled  de5bf729-d711-4e47-af26-65e3012a5dc7 ');
+                  _ensureLiveWorkoutListener();
                   // FFAppState().ListenValueCharactertics = characteristic;
                 } catch (e) {
                   // print('Error enabling notifications: $e');
@@ -191,6 +214,38 @@ class _DeviceScreenState extends State<DeviceScreen> {
             //     print('Characteristic does not support notifications');
             //   }
             // }
+          }
+        }
+        // Heart Rate service 180D
+        if (service.uuid.str.toString().toLowerCase().contains("0000180d-0000-1000-8000-00805f9b34fb") ||
+            service.uuid.str.toString().toLowerCase().contains("180d")) {
+          for (final characteristic in service.characteristics) {
+            final id = characteristic.uuid.str.toString().toLowerCase();
+            if (id == "00002a37-0000-1000-8000-00805f9b34fb" || id.endsWith("2a37")) {
+              try {
+                await characteristic.setNotifyValue(true);
+                setState(() { _hrMeasurementChar = characteristic; });
+                print('HR Measurement (2A37) notifications enabled');
+              } catch (e) {
+                print('Error enabling HR notify: $e');
+              }
+            }
+          }
+        }
+        // Running Speed and Cadence service 1814
+        if (service.uuid.str.toString().toLowerCase().contains("00001814-0000-1000-8000-00805f9b34fb") ||
+            service.uuid.str.toString().toLowerCase().contains("1814")) {
+          for (final characteristic in service.characteristics) {
+            final id = characteristic.uuid.str.toString().toLowerCase();
+            if (id == "00002a53-0000-1000-8000-00805f9b34fb" || id.endsWith("2a53")) {
+              try {
+                await characteristic.setNotifyValue(true);
+                setState(() { _rscMeasurementChar = characteristic; });
+                print('RSC Measurement (2A53) notifications enabled');
+              } catch (e) {
+                print('Error enabling RSC notify: $e');
+              }
+            }
           }
         }
       }
@@ -915,92 +970,557 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   // Step Data of Today
-  liveHeartRate() async {
+  liveHeartRate() {
     // Today
-    await _bluetoothCharacteristicWrite.write(
-      QCBandSDK.liveHeartData(1),
-    );
-    _bluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print('Received notification: $value');
-      if (value.isNotEmpty &&
-          value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
-        // var recievedHRVData = QCBandSDK.DataParsingWithData(value);
-        // print(recievedHRVData);
-        log('Received HRV: ${value[1]}');
+    // 1. Set up the notification listener ONLY ONCE.
+    // This listens for incoming data from the Bluetooth characteristic.
+    _setupHeartRateNotificationListener();
+
+    // 2. Start the periodic task to write data to the characteristic.
+    // This write operation typically requests the band to send heart rate data.
+    // The returned Timer object is stored in _heartRateRepeatingTimer so it can be cancelled later.
+    _heartRateRepeatingTimer = _startHeartRatePeriodicWrite();
+  }
+
+  void _ensureLiveWorkoutListener() {
+    if (_liveWorkoutSubscription != null) return;
+    Stream<List<int>>? stream;
+    try {
+      if (_secondbluetoothCharacteristicNotification.properties.notify) {
+        stream = _secondbluetoothCharacteristicNotification.value;
+      }
+    } catch (_) {}
+    if (stream == null) {
+      try {
+        stream = _bluetoothCharacteristicNotification.value;
+      } catch (_) {}
+    }
+    if (stream == null) return;
+    _liveWorkoutSubscription = stream.listen((value) async {
+      if (value.isEmpty) return;
+      // Delegate vendor 0xBC messages (header and continuation) to SDK
+      QCBandSDK.ingestVendorNotification(value);
+        // Log vendor ACKs for operate (0x40)
+        try {
+          if (value.length >= 2 && value[0] == 0xBC && (value[1] & 0xFF) == 0x40) {
+            final hex = value.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ');
+            print('Vendor ACK 0x40 ← $hex');
+          }
+        } catch (_) {}
+      final parsed = QCBandSDK.DataParsingWithData(value);
+      final dataType = parsed['dataType'];
+      if (dataType == 'LiveSportNotify') {
+        final data = parsed['dicData'] ?? parsed['data'] ?? parsed['Data'];
+        if (data is Map) {
+          // Debug: ensure we see updates
+          print(
+              'Live 0x78 → type=${data['sportType']} dur=${data['durationSec']}s hr=${data['heartRate']} steps=${data['steps']} dist=${data['distance']}m cal=${data['calorie']}');
+          setState(() {
+            _liveDurationSec = (data['durationSec'] ?? _liveDurationSec) as int;
+            _liveHr = (data['heartRate'] ?? _liveHr) as int;
+            _liveSteps = (data['steps'] ?? _liveSteps) as int;
+            _liveDistance = (data['distance'] ?? _liveDistance) as int;
+            _liveCalories = (data['calorie'] ?? _liveCalories) as int;
+            if (_liveHr > 0) _hrSamples.add(_liveHr);
+          });
+        }
+      } else if (value[0] == 120 && value.length >= 14) {
+        // Fallback: parse 0x78 live frame directly (little-endian for multi-byte fields)
+        final sportType = value[1];
+        final durationSec = value[2] | (value[3] << 8);
+        final hr = value[4];
+        final steps = value[5] | (value[6] << 8) | (value[7] << 16);
+        final distance = value[8] | (value[9] << 8) | (value[10] << 16);
+        final calories = value[11] | (value[12] << 8) | (value[13] << 16);
+        print(
+            'Live 0x78(raw) → type=$sportType dur=${durationSec}s hr=$hr steps=$steps dist=${distance}m cal=$calories');
+        setState(() {
+          _selectedSportType = sportType;
+          _liveDurationSec = durationSec;
+          _liveHr = hr;
+          _liveSteps = steps;
+          _liveDistance = distance;
+          _liveCalories = calories;
+          if (hr > 0) _hrSamples.add(hr);
+        });
+      }
+
+      if (value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate && value.length > 1) {
+        final hr = value[1];
+        setState(() {
+          _liveHr = hr;
+          _hrSamples.add(hr);
+        });
       }
     });
   }
 
-  sleepDetailData() async {
-    // Helper function to request data and wait for a single, complete response
-    Future<List<int>> fetchSingleDayResponse(int day) async {
-      final completer = Completer<List<int>>();
-      // The listener just needs to wait for the next valid sleep data packet.
-      final subscription =
-          _secondbluetoothCharacteristicNotification.value.listen((value) {
-        // Check if the packet is a valid sleep data response and we haven't already completed.
-        if (value.isNotEmpty &&
-            value[1] == QcBandSdkConst.getSleepData &&
-            !completer.isCompleted) {
-          completer.complete(value);
-        }
-      });
-
-      await _secondbluetoothCharacteristicWrite
-          .write(QCBandSDK.getSleepData(day));
-      print("Command for sleep data for day $day requested successfully.");
-
-      // Wait for the response, with a timeout
-      final response = await completer.future
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        print("Timeout waiting for sleep data for day $day");
-        return [];
-      });
-
-      subscription.cancel();
-      return response;
-    }
-
-    // --- Main Logic ---
-
-    // 1. Fetch and process Today's data (Day 0) separately
-    List<int> todayData = await fetchSingleDayResponse(0);
-    if (todayData.isNotEmpty) {
-      final parser = SleepParser(todayData, currentIndex: 0);
-      print("\nSleep Summary for day 0 (Today): ${parser.getSleepSummary()}");
-    }
-
-    // Keep track of the previous day's data for parsing
-    List<int> previousDayData = todayData;
-
-    // 2. Fetch and process historical data (Day 1 to 6)
-    for (int i = 1; i < 7; i++) {
-      // The device sends data for day `i` and `i-1` together when we ask for day `i`.
-      // The `getSleepSummaryYesterday` method internally splits this combined data.
-      List<int> combinedResponse = await fetchSingleDayResponse(i);
-
-      if (combinedResponse.isNotEmpty && previousDayData.isNotEmpty) {
-        final parser = SleepParser(combinedResponse, currentIndex: i);
-        final summary = parser.getSleepSummaryYesterday(
-          yesterdayList: combinedResponse, // This is the data for day `i`
-          todayList:
-              previousDayData, // This is the data from day `i-1`, used for the marker
-        );
-        print("\nSleep Summary for day $i: $summary");
+  // ============ On-device sport controls (vendor serial, 0xBC) ============
+  Future<void> _vendorWrite(Uint8List data) async {
+    try {
+      if (_secondbluetoothCharacteristicWrite != null) {
+        await _secondbluetoothCharacteristicWrite.write(data);
+      } else if (_bluetoothCharacteristicWrite != null) {
+        await _bluetoothCharacteristicWrite!.write(data);
       }
-      // Update previousDayData for the next iteration
-      previousDayData = combinedResponse;
-
-      // Add a small delay between requests to be safe
-      await Future.delayed(const Duration(milliseconds: 200));
+    } catch (e) {
+      print('Vendor write error: $e');
     }
   }
 
-  historicalSleepData() async {
-    // This function is deprecated as its logic has been integrated into sleepDetailData.
+  Future<void> _startOnDeviceSport() async {
+    final pkt = QCBandSDK.startOnDeviceSport(_selectedSportType);
+    setState(() { _vendorStatus = 'Sent START (type=$_selectedSportType)'; });
+    await _vendorWrite(pkt);
+  }
+
+  Future<void> _pauseOnDeviceSport() async {
+    final pkt = QCBandSDK.pauseOnDeviceSport(_selectedSportType);
+    setState(() { _vendorStatus = 'Sent PAUSE (type=$_selectedSportType)'; });
+    await _vendorWrite(pkt);
+  }
+
+  Future<void> _continueOnDeviceSport() async {
+    final pkt = QCBandSDK.continueOnDeviceSport(_selectedSportType);
+    setState(() { _vendorStatus = 'Sent CONTINUE (type=$_selectedSportType)'; });
+    await _vendorWrite(pkt);
+  }
+
+  Future<void> _stopOnDeviceSport() async {
+    final pkt = QCBandSDK.stopOnDeviceSport(_selectedSportType);
+    setState(() { _vendorStatus = 'Sent STOP (type=$_selectedSportType)'; });
+    await _vendorWrite(pkt);
+  }
+
+  // ============ Sport+ sync (summary + details) ============
+  int _lastSpSyncTs = 0;
+  List<Map<String, dynamic>> _lastSpSummaries = [];
+  List<String> _spLog = [];
+  // Render helper: format seconds to hh:mm:ss
+  String _fmtSeconds(int s) {
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    if (h > 0) return '${h}h ${m}m ${sec}s';
+    if (m > 0) return '${m}m ${sec}s';
+    return '${sec}s';
+  }
+  String _fmtUnix(int ts) {
+    if (ts <= 0) return '-';
+    final dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true).toLocal();
+    return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+  }
+
+  void _appendSpLog(String s) {
+    setState(() {
+      _spLog.insert(0, s);
+      if (_spLog.length > 200) _spLog.removeLast();
+    });
+  }
+
+  Future<void> _syncSportPlus() async {
+    // Register callbacks and write summary request
+    QCBandSDK.getSportPlusSummaryFromTimestamp(_lastSpSyncTs, (summaries) async {
+      setState(() {
+        _vendorStatus = 'SP+ summary received: ${summaries.length} sessions';
+        _lastSpSummaries = List<Map<String, dynamic>>.from(summaries);
+      });
+      if (summaries.isEmpty) return;
+      final latest = summaries.last;
+      // register details callback then request details
+      QCBandSDK.getSportPlusDetailsFor(
+        (latest['sportType'] ?? 0) as int,
+        (latest['startTime'] ?? 0) as int,
+        (summary, hrSeries, sampleSecond) {
+          _appendSpLog('SP+ details: samples=${hrSeries.length} sampleSecond=$sampleSecond');
+          setState(() {
+            _vendorStatus = 'SP+ details received: ${hrSeries.length} samples';
+          });
+        },
+      );
+      await _vendorWrite(QCBandSDK.buildSportPlusDetailsReq(latest['sportType'] ?? 0, latest['startTime'] ?? 0));
+    });
+    await _vendorWrite(QCBandSDK.buildSportPlusSummaryReq(_lastSpSyncTs));
+  }
+
+  void _setupHeartRateNotificationListener() {
+    // If there's an existing subscription, cancel it to prevent multiple listeners
+    if (_heartRateNotificationSubscription != null) {
+      _heartRateNotificationSubscription!.cancel();
+      _heartRateNotificationSubscription = null;
+      print('DEBUG: Cancelled previous heart rate notification subscription.');
+    }
+
+    print('DEBUG: Setting up heart rate notification listener...');
+    _heartRateNotificationSubscription =
+        _bluetoothCharacteristicNotification.value.listen(
+      (value) {
+        // Handle the received value (List<int>)
+        // print('Received notification: $value'); // Uncomment for detailed debug
+        if (value.isNotEmpty &&
+            value[0] == QcBandSdkConst.cmdGetRealTimeHeartRate) {
+          log('Received HRV: ${value[1]}'); // Assuming value[1] is the actual HR value
+        }
+      },
+      onError: (error) {
+        print('ERROR: Heart rate notification stream error: $error');
+      },
+      onDone: () {
+        print('DEBUG: Heart rate notification stream completed.');
+        _heartRateNotificationSubscription =
+            null; // Clear reference when stream closes
+      },
+    );
+  }
+
+  Widget _buildOnDeviceSportControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        if (_vendorStatus.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.amberAccent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade700, width: 1),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Colors.black.withOpacity(0.85)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _vendorStatus,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ElevatedButton(
+              onPressed: _startOnDeviceSport,
+              child: const Text('Start On-Device Sport'),
+            ),
+            ElevatedButton(
+              onPressed: _pauseOnDeviceSport,
+              child: const Text('Pause On-Device Sport'),
+            ),
+            ElevatedButton(
+              onPressed: _continueOnDeviceSport,
+              child: const Text('Continue On-Device Sport'),
+            ),
+            ElevatedButton(
+              onPressed: _stopOnDeviceSport,
+              child: const Text('Stop On-Device Sport'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton(
+          onPressed: _syncSportPlus,
+          child: const Text('Sync Workouts (Sport+)'),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ElevatedButton(
+              onPressed: () => _runVariantSweep(topOnly: true),
+              child: const Text('Run On-device Sport Tester (Top Variants)'),
+            ),
+            ElevatedButton(
+              onPressed: () => _runVariantSweep(topOnly: false),
+              child: const Text('Run Full Variant Sweep'),
+            ),
+            ElevatedButton(
+              onPressed: () => _runVariantSweep(topOnly: false),
+              child: const Text('Run Remaining Variants'),
+            ),
+            ElevatedButton(
+              onPressed: () => _runSpecificVariants(const [6, 7, 8, 9]),
+              child: const Text('Run Timestamp/Padding Variants (C/D)'),
+            ),
+            ElevatedButton(
+              onPressed: () => _runSpecificVariantsWithType(const [2, 3, 0, 1, 4, 5], 12),
+              child: const Text('Run Top Variants (APP_RUN=12)'),
+            ),
+            ElevatedButton(
+              onPressed: _runZeroBasedTop,
+              child: const Text('Run Top Variants (0-based states)'),
+            ),
+            ElevatedButton(
+              onPressed: () => _runB1WithFinalize(runSeconds: 190),
+              child: const Text('Run B1 with finalize (3 min)'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_lastSpSummaries.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade400, width: 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sport+ Sessions (${_lastSpSummaries.length})',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ..._lastSpSummaries.take(10).map((s) {
+                  final type = s['sportType'] ?? 0;
+                  final start = _fmtUnix((s['startTime'] ?? 0) as int);
+                  final dur = _fmtSeconds((s['duration'] ?? 0) as int);
+                  final dist = s['distance'] ?? 0;
+                  final cal = s['calories'] ?? 0;
+                  final hrMin = s['hrMin'];
+                  final hrAvg = s['hrAvg'];
+                  final hrMax = s['hrMax'];
+                  final hrStr = (hrMin != null && hrAvg != null && hrMax != null)
+                      ? ' HR[$hrMin/$hrAvg/$hrMax]'
+                      : '';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3.0),
+                    child: Text(
+                      '• type=$type  start=$start  dur=$dur  dist=${dist}m  cal=$cal$hrStr',
+                      style: const TextStyle(fontSize: 13, color: Colors.black),
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        const SizedBox(height: 8),
+        if (_spLog.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7F7F7),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            height: 140,
+            child: ListView.builder(
+              itemCount: _spLog.length,
+              itemBuilder: (_, i) => Text(_spLog[i], style: const TextStyle(fontSize: 12)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// This function starts the periodic write operation to the Bluetooth characteristic.
+  /// It returns the Timer object, which is crucial for stopping it later.
+  Timer _startHeartRatePeriodicWrite() {
+    const intervalDuration = Duration(seconds: 10);
+
     print(
-        "historicalSleepData is deprecated and its logic is now in sleepDetailData.");
+        'Scheduling heart rate data write every ${intervalDuration.inSeconds} seconds...');
+
+    // Timer.periodic creates a repeating timer.
+    // The 'await' call for writing data is now inside this periodic callback,
+    // ensuring it happens every 20 seconds.
+    return Timer.periodic(intervalDuration, (Timer timer) async {
+      print('---');
+      print('Performing periodic heart rate data write at ${DateTime.now()}');
+      await _bluetoothCharacteristicWrite.write(
+        QCBandSDK.liveHeartData(1), // This sends the command to the band
+      );
+      print('---');
+    });
+  }
+
+  /// This function stops both the repeating write task and the notification listener.
+  void stopHeartHeartRepeating() {
+    // Stop the periodic timer if it's active
+    if (_heartRateRepeatingTimer != null &&
+        _heartRateRepeatingTimer!.isActive) {
+      _heartRateRepeatingTimer!.cancel();
+      _heartRateRepeatingTimer = null; // Clear the reference after cancelling
+      print('Repeating heart rate data write stopped at ${DateTime.now()}');
+    } else {
+      print('No active repeating heart rate data write to stop.');
+    }
+
+    // Also, stop the notification listener to clean up resources
+    if (_heartRateNotificationSubscription != null) {
+      _heartRateNotificationSubscription!.cancel();
+      _heartRateNotificationSubscription = null; // Clear the reference
+      print('Heart rate notification listener stopped.');
+    } else {
+      print('No active heart rate notification listener to stop.');
+    }
+  }
+
+  // Clean method to get sleep data for all days with timestamps
+  Future<void> getSleepDataForAllDays() async {
+    print("🌙 Fetching sleep data for all available days...");
+    
+    // Fetch sleep data for the last 7 days (0 = today, 6 = 6 days ago)
+    for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+      await _fetchAndDisplaySleepData(dayIndex);
+      
+      // Small delay between requests to avoid overwhelming the device
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    
+    print("✅ Sleep data collection complete!");
+  }
+
+  // Fetch and display sleep data for a specific day
+  Future<void> _fetchAndDisplaySleepData(int dayIndex) async {
+    try {
+      List<int> sleepData = await _requestSleepDataFromDevice(dayIndex);
+      
+      if (sleepData.isNotEmpty && sleepData.length >= 13) {
+        final parser = SleepParser(sleepData, currentIndex: dayIndex);
+        final summary = parser.getSleepSummaryWithTimestamps();
+        
+        _displaySleepSummary(dayIndex, summary);
+      } else {
+        print("Day $dayIndex: No sleep data available");
+      }
+    } catch (e) {
+      print("Error fetching sleep data for day $dayIndex: $e");
+    }
+  }
+
+  // Display clean sleep summary with timestamps
+  void _displaySleepSummary(int dayIndex, SleepSummary summary) {
+    String dayLabel = dayIndex == 0 ? "Today" : "${dayIndex} day${dayIndex > 1 ? 's' : ''} ago";
+    
+    print("\n📊 Sleep Summary - $dayLabel (Day $dayIndex):");
+    
+    if (summary.bedTime != null && summary.wakeTime != null) {
+      print("  🛏️  Bed Time: ${_formatTime(summary.bedTime!)}");
+      print("  🌅 Wake Time: ${_formatTime(summary.wakeTime!)}");
+      print("  ⏱️  Total Sleep: ${summary.durations['totalDuration']} minutes");
+      
+      print("\n  📈 Sleep Stage Breakdown:");
+      print("    💤 Deep Sleep: ${summary.durations['deepSleep']} min");
+      print("    😴 Light Sleep: ${summary.durations['lightSleep']} min");
+      print("    👁️  REM Sleep: ${summary.durations['rapidEyeMovement']} min");
+      print("    😵 Awake: ${summary.durations['awake']} min");
+      
+      print("  🔄 Total Segments: ${summary.segments.length}");
+      
+      // Show first few segments as example
+      if (summary.segments.isNotEmpty) {
+        print("\n  📊 Sleep Timeline (first 5 segments):");
+        int maxSegments = summary.segments.length > 5 ? 5 : summary.segments.length;
+        
+        for (int i = 0; i < maxSegments; i++) {
+          final segment = summary.segments[i];
+          String stageType = _getSleepStageDisplayName(segment.stageType);
+          int duration = segment.segmentEnd.difference(segment.segmentStart).inMinutes;
+          
+          print("    ${i + 1}. ${_formatTime(segment.segmentStart)} → ${_formatTime(segment.segmentEnd)} ($duration min) - $stageType");
+        }
+        
+        if (summary.segments.length > 5) {
+          print("    ... and ${summary.segments.length - 5} more segments");
+        }
+      }
+    } else {
+      print("  ❌ No valid sleep times available");
+    }
+    
+    print("  ${'-' * 50}");
+  }
+
+  // Helper to format time consistently
+  String _formatTime(DateTime time) {
+    return "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+  }
+
+  // Helper to get display name for sleep stages
+  String _getSleepStageDisplayName(int stageType) {
+    switch (stageType) {
+      case 1: return "Deep Sleep";
+      case 2: return "Light Sleep"; 
+      case 3: return "Awake";
+      case 4: return "REM Sleep";
+      case 5: return "Unknown";
+      default: return "Unknown";
+    }
+  }
+
+  // Request sleep data from the device for a specific day
+  Future<List<int>> _requestSleepDataFromDevice(int dayIndex) async {
+    final completer = Completer<List<int>>();
+    List<int>? receivedData;
+    Timer? timeoutTimer;
+
+    // Set up listener for the response
+    final subscription = _secondbluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isNotEmpty && value[1] == QcBandSdkConst.getSleepData) {
+        // Valid sleep data response received
+        if (_isValidSleepDataPacket(value)) {
+          receivedData = List<int>.from(value);
+          
+          // Use a short delay to allow for any additional packets
+          timeoutTimer?.cancel();
+          timeoutTimer = Timer(const Duration(milliseconds: 200), () {
+            if (!completer.isCompleted && receivedData != null) {
+              completer.complete(receivedData!);
+            }
+          });
+        }
+      }
+    });
+
+    // Send the command to request sleep data
+    await _secondbluetoothCharacteristicWrite.write(QCBandSDK.getSleepData(dayIndex));
+
+    // Wait for response with timeout
+    final response = await completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        timeoutTimer?.cancel();
+        return receivedData ?? [];
+      },
+    );
+
+    subscription.cancel();
+    timeoutTimer?.cancel();
+
+    return response;
+  }
+
+  // Basic validation for sleep data packets
+  bool _isValidSleepDataPacket(List<int> data) {
+    // Basic checks: minimum length and correct command header
+    return data.length >= 10 && 
+           data[0] == 188 && 
+           (data[1] == 39 || data[1] == 68);
+  }
+
+  // Legacy method - keeping for backward compatibility but simplified
+  sleepDetailData() async {
+    print("⚠️  sleepDetailData() is deprecated. Use getSleepDataForAllDays() instead.");
+    await getSleepDataForAllDays();
+  }
+
+  historicalSleepData() async {
+    print("historicalSleepData is deprecated and its logic is now in getSleepDataForAllDays.");
   }
 
   deviceTimeSet() async {
@@ -1130,11 +1650,16 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   startWorkOut() async {
-    final List<int> command = QCBandSDK.startWorkOut();
+    final List<int> command =
+        QCBandSDK.startWorkOutWithType(sportType: _selectedSportType);
     try {
       await _bluetoothCharacteristicWrite!.write(
         command,
       );
+      // Start real-time HR stream for richer HR samples
+      await _bluetoothCharacteristicWrite
+          .write(QCBandSDK.liveHeartData(QcBandSdkConst.ACTION_START));
+      // Note: Do NOT send 0x5A heartbeat in phone-sport mode; device handles session autonomously
     } catch (e) {
       print("Error sending pressure request: $e");
     }
@@ -1150,7 +1675,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   pauseWorkOut() async {
-    final List<int> command = QCBandSDK.pauseWorkOut();
+    final List<int> command =
+        QCBandSDK.pauseWorkOutWithType(sportType: _selectedSportType);
     try {
       await _bluetoothCharacteristicWrite!.write(
         command,
@@ -1158,6 +1684,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     } catch (e) {
       print("Error sending pressure request: $e");
     }
+    // Nothing extra for pause
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
@@ -1170,7 +1697,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   continueWorkOut() async {
-    final List<int> command = QCBandSDK.continueWorkOut();
+    final List<int> command =
+        QCBandSDK.continueWorkOutWithType(sportType: _selectedSportType);
     try {
       await _bluetoothCharacteristicWrite!.write(
         command,
@@ -1178,6 +1706,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     } catch (e) {
       print("Error sending pressure request: $e");
     }
+    // Nothing extra for continue
     _bluetoothCharacteristicNotification.value.listen((value) {
       // Handle the received value (List<int>)
       print('Received notification: $value');
@@ -1190,11 +1719,18 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   stopWorkOut() async {
-    final List<int> command = QCBandSDK.stopWorkOut();
+    final List<int> command =
+        QCBandSDK.stopWorkOutWithType(sportType: _selectedSportType);
     try {
       await _bluetoothCharacteristicWrite!.write(
         command,
       );
+      // Stop real-time HR stream
+      await _bluetoothCharacteristicWrite
+          .write(QCBandSDK.liveHeartData(QcBandSdkConst.ACTION_STOP));
+      _hrKeepAliveTimer?.cancel();
+      _hrKeepAliveTimer = null;
+      // No sport heartbeat in phone-sport mode
     } catch (e) {
       print("Error sending pressure request: $e");
     }
@@ -1323,6 +1859,31 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     // Parse Response
                   },
                   child: Text('Find Device ')),
+              // Quick link to Sports Monitor page
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => SportsMonitorPage(
+                        vendorNotify: _secondbluetoothCharacteristicNotification,
+                        vendorWrite: _secondbluetoothCharacteristicWrite,
+                        standardNotify: _bluetoothCharacteristicNotification,
+                        standardWrite: _bluetoothCharacteristicWrite,
+                        hrNotify: _hrMeasurementChar,
+                        rscNotify: _rscMeasurementChar,
+                        initialSportType: _selectedSportType,
+                      ),
+                    ));
+                  },
+                  child: const Text('Open Sports Monitor'),
+                ),
+              ),
+              // On-device sport and Sport+ controls
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                child: _buildOnDeviceSportControls(),
+              ),
               // TextButton(
               //     onPressed: () {
               //       // Notify Listenner of the Command
@@ -1385,14 +1946,16 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // Notify Listenner of the Command
-                  // getDeviceBattery();
-                  //Send Command
-                  TODO: // Working Need Work on Parsing
-                  sleepDetailData();
+                  stopHeartHeartRepeating();
                   // Parse Response
                 },
-                child: Text('Sleep Details Data'),
+                child: Text('Stop Heart Rate'),
+              ),
+              TextButton(
+                onPressed: () {
+                  getSleepDataForAllDays();
+                },
+                child: Text('Get Sleep Data (All Days)'),
               ),
               TextButton(
                 onPressed: () {
@@ -1513,6 +2076,26 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 onPressed: startWorkOut,
                 child: Text('Start WorkOut'),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Row(
+                  children: [
+                    const Text('Sport Type:'),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: _selectedSportType,
+                      items: const [
+                        DropdownMenuItem(value: 4, child: Text('Walk')),
+                        DropdownMenuItem(value: 7, child: Text('Run')),
+                        DropdownMenuItem(value: 8, child: Text('Hike')),
+                        DropdownMenuItem(value: 9, child: Text('Cycling')),
+                        DropdownMenuItem(value: 10, child: Text('Other')),
+                      ],
+                      onChanged: (v) => setState(() => _selectedSportType = v ?? 7),
+                    ),
+                  ],
+                ),
+              ),
               TextButton(
                 onPressed: pauseWorkOut,
                 child: Text('Pause WorkOut'),
@@ -1525,10 +2108,309 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 onPressed: stopWorkOut,
                 child: Text('Stop WorkOut'),
               ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Live Duration: ${_liveDurationSec}s'),
+                    Text('HR: $_liveHr bpm  Steps: $_liveSteps  Dist: ${_liveDistance}m  Cal: $_liveCalories'),
+                    Text('HR samples captured: ${_hrSamples.length}')
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  // ================= Variant sweep (on-device sport 0x40) =================
+  Uint8List _buildOp40Packet(int state, int sportType, int variantIndex) {
+    final nowSec = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    Uint8List ts4() {
+      final b = ByteData(4)..setUint32(0, nowSec, Endian.little);
+      return b.buffer.asUint8List();
+    }
+    List<int> p;
+    switch (variantIndex) {
+      case 0: // A1: [state, type]
+        p = [state & 0xFF, sportType & 0xFF];
+        break;
+      case 1: // A2: [type, state]
+        p = [sportType & 0xFF, state & 0xFF];
+        break;
+      case 2: // B1: [state, type, 0x01]
+        p = [state & 0xFF, sportType & 0xFF, 0x01];
+        break;
+      case 3: // B2: [state, type, 0x00]
+        p = [state & 0xFF, sportType & 0xFF, 0x00];
+        break;
+      case 4: // B3: [type, state, 0x01]
+        p = [sportType & 0xFF, state & 0xFF, 0x01];
+        break;
+      case 5: // B4: [type, state, 0x00]
+        p = [sportType & 0xFF, state & 0xFF, 0x00];
+        break;
+      case 6: // C1: [state, type, tsLE(4), 0x01]
+        p = [state & 0xFF, sportType & 0xFF, ...ts4(), 0x01];
+        break;
+      case 7: // C2: [state, type, 0x01, tsLE(4)]
+        p = [state & 0xFF, sportType & 0xFF, 0x01, ...ts4()];
+        break;
+      case 8: // D1: [state, type, 0x01, 0x00, 0x00, 0x00]
+        p = [state & 0xFF, sportType & 0xFF, 0x01, 0x00, 0x00, 0x00];
+        break;
+      case 9: // D2: [type, state, 0x01, 0x00, 0x00, 0x00]
+        p = [sportType & 0xFF, state & 0xFF, 0x01, 0x00, 0x00, 0x00];
+        break;
+      default:
+        p = [state & 0xFF, sportType & 0xFF, 0x01];
+        break;
+    }
+    final payload = Uint8List.fromList(p);
+    final pkt = QCBandSDK.buildVendorPacket(0x40, payload);
+    final tag = _variantLabel(variantIndex);
+    print('op40 $tag → ${pkt.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
+    return pkt;
+  }
+
+  String _variantLabel(int idx) {
+    const labels = [
+      'A1[state,type]',
+      'A2[type,state]',
+      'B1[state,type,01]',
+      'B2[state,type,00]',
+      'B3[type,state,01]',
+      'B4[type,state,00]',
+      'C1[state,type,ts,01]',
+      'C2[state,type,01,ts]',
+      'D1[state,type,01,00,00,00]',
+      'D2[type,state,01,00,00,00]',
+    ];
+    if (idx >= 0 && idx < labels.length) return labels[idx];
+    return 'var$idx';
+  }
+
+  Future<Set<String>> _getSummaryIdsSince(int cutoffTs) async {
+    final comp = Completer<Set<String>>();
+    void onResult(List<Map<String, dynamic>> summaries) {
+      final ids = <String>{};
+      for (final s in summaries) {
+        final st = (s['startTime'] ?? 0) as int;
+        final ty = (s['sportType'] ?? 0) as int;
+        if (st >= cutoffTs) {
+          ids.add('$ty-$st');
+        }
+      }
+      if (!comp.isCompleted) comp.complete(ids);
+    }
+    QCBandSDK.getSportPlusSummaryFromTimestamp(cutoffTs, onResult);
+    await _vendorWrite(QCBandSDK.buildSportPlusSummaryReq(cutoffTs));
+    try {
+      return await comp.future.timeout(const Duration(seconds: 6));
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  Future<bool> _testSingleVariant(int variantIndex, {int runSeconds = 75, int? overrideSportType}) async {
+    final type = overrideSportType ?? _selectedSportType;
+    final cutoff = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000 - 1800; // 30 min window
+    final before = await _getSummaryIdsSince(cutoff);
+
+    setState(() { _vendorStatus = 'Variant ${_variantLabel(variantIndex)} → START (type=$type)'; });
+    await _vendorWrite(_buildOp40Packet(QcBandSdkConst.ACTION_START, type, variantIndex));
+    await Future.delayed(Duration(seconds: runSeconds));
+    setState(() { _vendorStatus = 'Variant ${_variantLabel(variantIndex)} → STOP (type=$type)'; });
+    await _vendorWrite(_buildOp40Packet(QcBandSdkConst.ACTION_STOP, type, variantIndex));
+
+    // Give device a moment to finalize, then fetch summaries
+    await Future.delayed(const Duration(seconds: 12));
+    final after = await _getSummaryIdsSince(cutoff);
+    final diff = after.difference(before);
+    final ok = diff.isNotEmpty;
+    print('Variant ${_variantLabel(variantIndex)} result → ${ok ? 'SUCCESS' : 'NO RECORD'} (new=${diff.length})');
+    setState(() { _vendorStatus = 'Variant ${_variantLabel(variantIndex)} → ${ok ? 'SUCCESS' : 'No record'}'; });
+    return ok;
+  }
+
+  Future<void> _runVariantSweep({required bool topOnly}) async {
+    if (!isConnected) {
+      Snackbar.show(ABC.c, 'Not connected', success: false);
+      return;
+    }
+    // Ensure no phone-controlled mode keepalives
+    _hrKeepAliveTimer?.cancel();
+    _sportHeartbeatTimer?.cancel();
+
+    // Track tested variants in-memory per app run
+    _testedVariants ??= <int>{};
+    final baseOrderTop = <int>[2, 3, 0, 1, 4, 5];
+    final baseOrderFull = <int>[...baseOrderTop, 6, 7, 8, 9];
+    final base = topOnly ? baseOrderTop : baseOrderFull;
+    // If user asked for remaining but we have evidence of earlier B1 run in this session, mark them as tested.
+    // Heuristic: if we ever saw an ACK for 0x40 in logs already, assume early variants may have been tried.
+    // Safer approach: pre-mark B1..B4 as tested when running non-top sweeps.
+    if (!topOnly) {
+      _testedVariants!.addAll({2, 3, 0, 1, 4, 5});
+    }
+    final variants = base.where((v) => !_testedVariants!.contains(v)).toList();
+    if (variants.isEmpty) {
+      Snackbar.show(ABC.c, topOnly ? 'Top variants already tested' : 'All variants already tested', success: false);
+      return;
+    }
+
+    for (final v in variants) {
+      _testedVariants!.add(v);
+      final ok = await _testSingleVariant(v, runSeconds: 75);
+      if (ok) {
+        Snackbar.show(ABC.c, 'Found working variant: ${_variantLabel(v)}', success: true);
+        break;
+      }
+      // Small rest between attempts
+      await Future.delayed(const Duration(seconds: 8));
+    }
+  }
+
+  Set<int>? _testedVariants;
+
+  Future<void> _runSpecificVariants(List<int> order) async {
+    if (!isConnected) {
+      Snackbar.show(ABC.c, 'Not connected', success: false);
+      return;
+    }
+    _hrKeepAliveTimer?.cancel();
+    _sportHeartbeatTimer?.cancel();
+    _testedVariants ??= <int>{};
+    final variants = order.where((v) => !_testedVariants!.contains(v)).toList();
+    if (variants.isEmpty) {
+      Snackbar.show(ABC.c, 'Selected variants already tested', success: false);
+      return;
+    }
+    for (final v in variants) {
+      _testedVariants!.add(v);
+      final ok = await _testSingleVariant(v, runSeconds: 75);
+      if (ok) {
+        Snackbar.show(ABC.c, 'Found working variant: ${_variantLabel(v)}', success: true);
+        break;
+      }
+      await Future.delayed(const Duration(seconds: 8));
+    }
+  }
+
+  Future<void> _runSpecificVariantsWithType(List<int> order, int sportType) async {
+    if (!isConnected) {
+      Snackbar.show(ABC.c, 'Not connected', success: false);
+      return;
+    }
+    _hrKeepAliveTimer?.cancel();
+    _sportHeartbeatTimer?.cancel();
+    _testedVariants ??= <int>{};
+    final variants = order.where((v) => !_testedVariants!.contains(v)).toList();
+    if (variants.isEmpty) {
+      Snackbar.show(ABC.c, 'Selected variants already tested', success: false);
+      return;
+    }
+    for (final v in variants) {
+      _testedVariants!.add(v);
+      final ok = await _testSingleVariant(v, runSeconds: 75, overrideSportType: sportType);
+      if (ok) {
+        Snackbar.show(ABC.c, 'Found working variant: ${_variantLabel(v)} (type=$sportType)', success: true);
+        break;
+      }
+      await Future.delayed(const Duration(seconds: 8));
+    }
+  }
+
+  Future<void> _runZeroBasedTop() async {
+    if (!isConnected) {
+      Snackbar.show(ABC.c, 'Not connected', success: false);
+      return;
+    }
+    _hrKeepAliveTimer?.cancel();
+    _sportHeartbeatTimer?.cancel();
+    final variants = <int>[2, 3, 0, 1, 4, 5].where((v) => !(_testedVariants ?? {}).contains(v)).toList();
+    if (variants.isEmpty) {
+      Snackbar.show(ABC.c, 'Top variants already tested', success: false);
+      return;
+    }
+    for (final v in variants) {
+      final ok = await _testSingleVariantZeroBased(v, runSeconds: 75);
+      if (ok) {
+        Snackbar.show(ABC.c, 'Found working (0-based states): ${_variantLabel(v)}', success: true);
+        break;
+      }
+      await Future.delayed(const Duration(seconds: 8));
+    }
+  }
+
+  Future<bool> _testSingleVariantZeroBased(int variantIndex, {int runSeconds = 75}) async {
+    final type = _selectedSportType;
+    final cutoff = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000 - 1800;
+    final before = await _getSummaryIdsSince(cutoff);
+    // 0-based mapping: start=0, pause=1, continue=2, stop=3
+    const stStart = 0, stStop = 3;
+    setState(() { _vendorStatus = '0-based ${_variantLabel(variantIndex)} → START (type=$type)'; });
+    await _vendorWrite(_buildOp40Packet(stStart, type, variantIndex));
+    await Future.delayed(Duration(seconds: runSeconds));
+    setState(() { _vendorStatus = '0-based ${_variantLabel(variantIndex)} → STOP (type=$type)'; });
+    await _vendorWrite(_buildOp40Packet(stStop, type, variantIndex));
+    await Future.delayed(const Duration(seconds: 12));
+    final after = await _getSummaryIdsSince(cutoff);
+    final ok = after.difference(before).isNotEmpty;
+    print('0-based ${_variantLabel(variantIndex)} result → ${ok ? 'SUCCESS' : 'NO RECORD'}');
+    return ok;
+  }
+
+  Future<void> _runB1WithFinalize({required int runSeconds, int? overrideSportType}) async {
+    if (!isConnected) {
+      Snackbar.show(ABC.c, 'Not connected', success: false);
+      return;
+    }
+    // B1 = variantIndex 2
+    final type = overrideSportType ?? _selectedSportType;
+    final cutoff = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000 - 1800;
+    final before = await _getSummaryIdsSince(cutoff);
+
+    // Optional pre-enable (hypothesis: enable on-device sport source)
+    await _vendorWrite(QCBandSDK.buildVendorPacket(0x47, Uint8List.fromList([0x01])));
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    setState(() { _vendorStatus = 'B1+finalize → START (type=$type)'; });
+    await _vendorWrite(_buildOp40Packet(QcBandSdkConst.ACTION_START, type, 2));
+    await Future.delayed(Duration(seconds: runSeconds));
+    setState(() { _vendorStatus = 'B1+finalize → STOP (type=$type)'; });
+    await _vendorWrite(_buildOp40Packet(QcBandSdkConst.ACTION_STOP, type, 2));
+
+    // Finalize attempts
+    await Future.delayed(const Duration(seconds: 1));
+    final List<Uint8List> finishSeq = [
+      QCBandSDK.buildVendorPacket(0x4F, null),
+      QCBandSDK.buildVendorPacket(0x46, Uint8List.fromList([0x00])),
+      QCBandSDK.buildVendorPacket(0x46, Uint8List.fromList([0x01])),
+    ];
+    for (final pkt in finishSeq) {
+      await _vendorWrite(pkt);
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
+    // Optional post-disable
+    await _vendorWrite(QCBandSDK.buildVendorPacket(0x47, Uint8List.fromList([0x00])));
+
+    // Fetch summaries
+    await Future.delayed(const Duration(seconds: 12));
+    final after = await _getSummaryIdsSince(cutoff);
+    final diff = after.difference(before);
+    final ok = diff.isNotEmpty;
+    print('B1+finalize result → ${ok ? 'SUCCESS' : 'NO RECORD'} (new=${diff.length})');
+    setState(() { _vendorStatus = 'B1+finalize → ${ok ? 'SUCCESS' : 'No record'}'; });
+  }
+
+  // PRODUCTION SLEEP DATA EXAMPLE
+  // Use the existing fetchSingleDayResponse and SleepParser for production integration
+  // Example:
+  // List<int> response = await fetchSingleDayResponse(daysAgo);
+  // SleepParser parser = SleepParser(response, currentIndex: daysAgo);
+  // SleepSummary summary = parser.getSleepSummaryWithTimestamps();
 }

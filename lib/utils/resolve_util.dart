@@ -1970,6 +1970,158 @@ class ResolveUtil {
     return crc & 0xFFFF; // Ensure result is a 16-bit unsigned integer
   }
 
+  // ========================= Sport+ (0xBC vendor) parsers =========================
+  // Parse Sport+ summary buffer (payload of 0x42 assembled across chunks)
+  // Format: repeated blocks; each block starts with length L, then:
+  //   [len=L][0x??][sportType][TLVs...]
+  // TLVs inside block: [len][key][value...(len-2 bytes)], repeated
+  // Known keys: 1=startTime(4 LE), 2=duration(s,4), 3=distance(m,4), 4=calories(4), 7/8/9=hr avg/min/max (4 each), 19=steps(4)
+  static List<Map<String, dynamic>> parseSportPlusSummaryBuffer(Uint8List buffer) {
+    final List<Map<String, dynamic>> summaries = [];
+    if (buffer.isEmpty) return summaries;
+    // First byte is the number of summary blocks
+    int remaining = buffer[0] & 0xFF;
+    int i = 1;
+    while (remaining > 0 && i < buffer.length) {
+      final int blockLen = buffer[i] & 0xFF;
+      // Guard against malformed length
+      if (blockLen < 3 || i + blockLen > buffer.length) {
+        // Log and abort to avoid RangeError
+        print('SP+ summary parse: invalid blockLen=$blockLen at offset=$i totalBuf=${buffer.length}');
+        break;
+      }
+      final Uint8List block = Uint8List.fromList(buffer.sublist(i, i + blockLen));
+      // block layout: [len][sportType][TLVs...]
+      final int sportType = block[1] & 0xFF;
+      int offset = 2;
+      final Map<String, dynamic> item = {
+        'sportType': sportType,
+        'startTime': 0,
+        'duration': 0,
+        'distance': 0,
+        'calories': 0,
+        'hrAvg': null,
+        'hrMin': null,
+        'hrMax': null,
+        'steps': null,
+      };
+      while (offset < blockLen) {
+        if (offset + 2 > blockLen) break;
+        final int tlvLen = block[offset + 0] & 0xFF;
+        final int key = block[offset + 1] & 0xFF;
+        final int valueLen = tlvLen - 2;
+        if (valueLen > 0 && offset + 2 + valueLen <= block.length) {
+          final Uint8List val = Uint8List.fromList(block.sublist(offset + 2, offset + 2 + valueLen));
+          int le32(Uint8List v) {
+            int out = 0;
+            for (int k = 0; k < v.length && k < 4; k++) {
+              out |= (v[k] & 0xFF) << (8 * k);
+            }
+            return out;
+          }
+          switch (key) {
+            case 1:
+              item['startTime'] = le32(val);
+              break;
+            case 2:
+              item['duration'] = le32(val);
+              break;
+            case 3:
+              item['distance'] = le32(val);
+              break;
+            case 4:
+              item['calories'] = le32(val);
+              break;
+            case 7:
+              item['hrAvg'] = le32(val);
+              break;
+            case 8:
+              item['hrMin'] = le32(val);
+              break;
+            case 9:
+              item['hrMax'] = le32(val);
+              break;
+            case 19:
+              item['steps'] = le32(val);
+              break;
+            default:
+              break;
+          }
+        } else if (tlvLen == 0) {
+          // Avoid infinite loops on bad data
+          break;
+        }
+        offset += (tlvLen > 0 ? tlvLen : 1);
+      }
+      summaries.add(item);
+      i += blockLen;
+      remaining -= 1;
+    }
+    return summaries;
+  }
+
+  // Parse details meta (payload of 0x44)
+  // Layout: [0x00][packageCount(2 LE? treat as 1-2 bytes)][sampleSecond][pairs of (len,key)...]
+  static Map<String, dynamic> parseSportPlusDetailsMeta(Uint8List data) {
+    if (data.isEmpty) return {};
+    // data[0] reserved
+    int packageCount;
+    // packageCount is stored in 1 or 2 bytes; handle both safely
+    if (data.length >= 3) {
+      packageCount = (data[1] & 0xFF) | ((data[2] & 0xFF) << 8);
+    } else if (data.length >= 2) {
+      packageCount = data[1] & 0xFF;
+    } else {
+      packageCount = 0;
+    }
+    final int sampleSecond = data.length >= 4 ? (data[3] & 0xFF) : 0;
+    final Map<int, int> keyLen = {};
+    final List<int> keyOrder = [];
+    int totalLen = 0;
+    for (int idx = 4; idx + 1 < data.length; idx += 2) {
+      final int len = data[idx] & 0xFF;
+      final int key = data[idx + 1] & 0xFF;
+      keyLen[key] = len;
+      keyOrder.add(key);
+      totalLen += len;
+    }
+    return {
+      'packageCount': packageCount,
+      'sampleSecond': sampleSecond,
+      'keyLen': keyLen,
+      'keyOrder': keyOrder,
+      'recordByteLen': totalLen,
+    };
+  }
+
+  // Extract HR series (key 17) from assembled details data (payload of 0x45)
+  // Data: [packageId(2 bytes?)][records...], where each record is recordByteLen bytes, fields in keyOrder.
+  static List<int> extractHrSeriesFromDetails(Uint8List detailsPayload, Map<String, dynamic> meta) {
+    if (detailsPayload.length <= 2) return [];
+    final int recordByteLen = (meta['recordByteLen'] ?? 0) as int;
+    if (recordByteLen <= 0) return [];
+    final Map<int, int> keyLen = (meta['keyLen'] as Map<int, int>?) ?? {};
+    final List<int> keyOrder = (meta['keyOrder'] as List<int>?) ?? [];
+    // Calculate offset of HR key (17) within one record
+    int hrOffset = 0;
+    for (final k in keyOrder) {
+      if (k == 17) break;
+      if (k == 15 || k == 16) {
+        // skip GPS (lat/lon) if present; still counts toward offset
+      }
+      hrOffset += (keyLen[k] ?? 0);
+    }
+    final List<int> hrSeries = [];
+    int index = 2; // skip packageId
+    while (index + recordByteLen <= detailsPayload.length) {
+      final int pos = index + hrOffset;
+      if (pos < index + recordByteLen && pos < detailsPayload.length) {
+        hrSeries.add(detailsPayload[pos] & 0xFF);
+      }
+      index += recordByteLen;
+    }
+    return hrSeries;
+  }
  
 
   List<int> calculateCrc(List<int> data) {
@@ -1981,5 +2133,41 @@ class ResolveUtil {
     // Mask to 8 bits and set the last byte
     data[data.length - 1] = (crc & 0xFF);
     return data;
+  }
+
+  // Parses live workout notifications pushed during phone-controlled sport (cmd 0x78/120)
+  static Map<String, dynamic> parseLiveSportNotify(List<int> value) {
+    if (value.length < 16) {
+      return {
+        DeviceKey.DataType: 'LiveSportNotify',
+        DeviceKey.End: true,
+        DeviceKey.Data: {
+          'error': 'payload too short',
+          'raw': value,
+        }
+      };
+    }
+
+    final int sportType = _hexByte2Int(value[1], 0);
+    final int durationMinutes = _hexByte2Int(value[2], 0) + _hexByte2Int(value[3], 1);
+    final int durationSecondsPart = _hexByte2Int(value[4], 0);
+    final int durationSec = durationMinutes * 60 + durationSecondsPart;
+    final int hr = _hexByte2Int(value[5], 0);
+    final int steps = QCBandSDK.bytes2Int([value[6], value[7], value[8]]);
+    final int distanceMeters = QCBandSDK.bytes2Int([value[9], value[10], value[11]]);
+    final int calories = QCBandSDK.bytes2Int([value[12], value[13], value[14]]);
+
+    return {
+      DeviceKey.DataType: 'LiveSportNotify',
+      DeviceKey.End: true,
+      DeviceKey.Data: {
+        'sportType': sportType,
+        'durationSec': durationSec,
+        'heartRate': hr,
+        'steps': steps,
+        'distance': distanceMeters,
+        'calorie': calories,
+      }
+    };
   }
 }

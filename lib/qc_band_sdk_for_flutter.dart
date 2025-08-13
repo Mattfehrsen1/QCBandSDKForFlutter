@@ -169,6 +169,8 @@ class QCBandSDK {
       case QcBandSdkConst.cmdHrv:
         // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
         return ResolveUtil.getHrvTestData(value);
+      case 120: // phone sport notify (0x78)
+        return ResolveUtil.parseLiveSportNotify(value);
       // case DeviceConst.CMD_Reset:
       //   return ResolveUtil.Reset();
       // case DeviceConst.CMD_Mcu_Reset:
@@ -321,6 +323,7 @@ class QCBandSDK {
     return ResolveUtil.setMethodError(_getBcdValue(value[0]).toString());
   }
 
+<<<<<<< HEAD
   // ================= Alarms (classic 0x23/0x24) =================
   static Uint8List buildSetAlarmClassic(Alarm alarm) {
     final List<int> value = _generateInitValue();
@@ -346,6 +349,288 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+=======
+  // ================= Vendor Serial (0xBC) helpers and Sport+ =================
+  // Build vendor packet using ResolveUtil.addHeader
+  static Uint8List buildVendorPacket(int cmd, [Uint8List? payload]) {
+    return ResolveUtil().addHeader(cmd, payload);
+  }
+
+  // On-device sport control (operateSportModeWithType:state:)
+  // NOTE: Opcode not present in decompiled listing; use 0x40 as tentative (will be verified via logs).
+  // Payload layout [sportType(1), state(1)] based on iOS header semantics.
+  static Uint8List startOnDeviceSport(int sportType) {
+    // Some firmwares expect [state, sportType, sourceType] ordering.
+    // Use sourceType=1 (App) — several firmwares expect app as the controller
+    final payload = Uint8List.fromList([
+      QcBandSdkConst.ACTION_START,
+      sportType & 0xFF,
+      0x01,
+    ]);
+    final pkt = buildVendorPacket(0x40, payload);
+    print('opSport start → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+    return pkt;
+  }
+
+  static Uint8List pauseOnDeviceSport(int sportType) {
+    final payload = Uint8List.fromList([
+      QcBandSdkConst.ACTION_PAUSE,
+      sportType & 0xFF,
+      0x01,
+    ]);
+    final pkt = buildVendorPacket(0x40, payload);
+    print('opSport pause → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+    return pkt;
+  }
+
+  static Uint8List continueOnDeviceSport(int sportType) {
+    final payload = Uint8List.fromList([
+      QcBandSdkConst.ACTION_CONTINUE,
+      sportType & 0xFF,
+      0x01,
+    ]);
+    final pkt = buildVendorPacket(0x40, payload);
+    print('opSport continue → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+    return pkt;
+  }
+
+  static Uint8List stopOnDeviceSport(int sportType) {
+    final payload = Uint8List.fromList([
+      QcBandSdkConst.ACTION_STOP,
+      sportType & 0xFF,
+      0x01,
+    ]);
+    final pkt = buildVendorPacket(0x40, payload);
+    print('opSport stop → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+    return pkt;
+  }
+
+  // ================= Phone-controlled sport (Nordic UART 6e40...) =================
+  // The production APK uses command 0x77 with a fixed 16-byte packet and 8-bit sum CRC.
+  // Frame layout:
+  // [0]:   key = 0x77
+  // [1..14]: payload (we use [status, sportType] then zeros)
+  // [15]:  crc8 = sum(bytes[0..14]) & 0xFF
+  static Uint8List _buildPhoneSportCmd(int status, int sportType) {
+    final data = Uint8List(16);
+    data[0] = 0x77;
+    data[1] = status & 0xFF;
+    data[2] = sportType & 0xFF;
+    // rest already zero
+    int sum = 0;
+    for (int i = 0; i < 15; i++) {
+      sum = (sum + (data[i] & 0xFF)) & 0xFF;
+    }
+    data[15] = sum & 0xFF;
+    return data;
+  }
+
+  // Status mapping observed in production APK:
+  // 1=start, 2=pause, 3=continue, 4=stop, 6=pre-stop
+  static Uint8List phoneSportStart(int sportType) => _buildPhoneSportCmd(1, sportType);
+  static Uint8List phoneSportPause(int sportType) => _buildPhoneSportCmd(2, sportType);
+  static Uint8List phoneSportContinue(int sportType) => _buildPhoneSportCmd(3, sportType);
+  static Uint8List phoneSportPreStop(int sportType) => _buildPhoneSportCmd(6, sportType);
+  static Uint8List phoneSportStop(int sportType) => _buildPhoneSportCmd(4, sportType);
+
+  // Sport+ history
+  // 0x41 summary request: payload 4-byte LE timestamp
+  static Uint8List buildSportPlusSummaryReq(int unixTs) {
+    final b = ByteData(4)..setUint32(0, unixTs, Endian.little);
+    final payload = b.buffer.asUint8List();
+    return buildVendorPacket(0x41, payload);
+  }
+
+  // 0x43 details request: payload [sportType(1), ts(4 LE)]
+  static Uint8List buildSportPlusDetailsReq(int sportType, int startTime) {
+    final b = ByteData(5);
+    b.setUint8(0, sportType & 0xFF);
+    b.setUint32(1, startTime, Endian.little);
+    final payload = b.buffer.asUint8List();
+    return buildVendorPacket(0x43, payload);
+  }
+
+  // Assemble chunked responses for summary (0x42) and details (0x44/0x45)
+  static Uint8List? _spSummaryBuf;
+  static int _spSummaryTotal = 0;
+  static int _spSummaryReceived = 0;
+
+  static Uint8List? _spDetailsBuf;
+  static int _spDetailsTotal = 0;
+  static int _spDetailsReceived = 0;
+  static Map<String, dynamic>? _spDetailsMeta;
+  static void Function(List<Map<String, dynamic>> summaries)? _onSpSummary;
+  static void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond)? _onSpDetails;
+
+  // Public API: summary fetch with assembler and callback
+  static Future<void> getSportPlusSummaryFromTimestamp(
+    int unixTs,
+    void Function(List<Map<String, dynamic>> summaries) onResult,
+  ) async {
+    _spSummaryBuf = null;
+    _spSummaryTotal = 0;
+    _spSummaryReceived = 0;
+    _onSpSummary = onResult;
+    print('SP+ summary → ts=$unixTs');
+  }
+
+  // Public API: details fetch with assembler and callback
+  static Future<void> getSportPlusDetailsFor(
+    int sportType,
+    int startTime,
+    void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond) onResult,
+  ) async {
+    _spDetailsBuf = null;
+    _spDetailsTotal = 0;
+    _spDetailsReceived = 0;
+    _spDetailsMeta = null;
+    _onSpDetails = onResult;
+    print('SP+ details → type=$sportType ts=$startTime');
+  }
+
+  // Feed incoming notify data to assemble Sport+ messages (0xBC vendor channel)
+  static void ingestVendorNotification(List<int> value) {
+    if (value.isEmpty) return;
+    try {
+      // Ignore non-0xBC frames unless we're in the middle of assembling
+      if (value[0] != 0xBC && _spSummaryTotal == 0 && _spDetailsTotal == 0) {
+        return;
+      }
+      if (value.length >= 6 && value[0] == 0xBC) {
+        final int cmd = value[1] & 0xFF;
+        final int total = (value[2] & 0xFF) | ((value[3] & 0xFF) << 8);
+        final Uint8List payload = Uint8List.fromList(value.sublist(6));
+        if (cmd == 0x42) {
+          if (_spSummaryTotal == 0) {
+            _spSummaryTotal = total;
+            _spSummaryBuf = Uint8List(_spSummaryTotal);
+            _spSummaryReceived = 0;
+          }
+          if (_spSummaryBuf != null) {
+            final int end = (_spSummaryReceived + payload.length).clamp(0, _spSummaryTotal);
+            _spSummaryBuf!.setRange(_spSummaryReceived, end, payload.sublist(0, end - _spSummaryReceived));
+            _spSummaryReceived = end;
+            if (_spSummaryReceived >= _spSummaryTotal) {
+              final summaries = ResolveUtil.parseSportPlusSummaryBuffer(_spSummaryBuf!);
+              for (final s in summaries) {
+                final iso = DateTime.fromMillisecondsSinceEpoch(((s['startTime'] ?? 0) as int) * 1000, isUtc: true).toIso8601String();
+                print('SP+ summary: type=${s['sportType']} start=$iso dur=${s['duration']} dist=${s['distance']} cal=${s['calories']} hr[min/avg/max]=[${s['hrMin']}/${s['hrAvg']}/${s['hrMax']}]');
+              }
+              _onSpSummary?.call(summaries);
+              _spSummaryBuf = null; _spSummaryTotal = 0; _spSummaryReceived = 0;
+            }
+          }
+          return;
+        }
+        if (cmd == 0x44) {
+          _spDetailsMeta = ResolveUtil.parseSportPlusDetailsMeta(payload);
+          final pkgCount = _spDetailsMeta?['packageCount'] ?? 0;
+          print('SP+ details meta: packages=$pkgCount sampleSecond=${_spDetailsMeta?['sampleSecond']}');
+          return;
+        }
+        if (cmd == 0x45) {
+          if (_spDetailsTotal == 0) {
+            _spDetailsTotal = total;
+            _spDetailsBuf = Uint8List(_spDetailsTotal);
+            _spDetailsReceived = 0;
+          }
+          if (_spDetailsBuf != null) {
+            final int end = (_spDetailsReceived + payload.length).clamp(0, _spDetailsTotal);
+            _spDetailsBuf!.setRange(_spDetailsReceived, end, payload.sublist(0, end - _spDetailsReceived));
+            _spDetailsReceived = end;
+            if (_spDetailsReceived >= _spDetailsTotal) {
+              final meta = _spDetailsMeta ?? {};
+              final hrSeries = ResolveUtil.extractHrSeriesFromDetails(_spDetailsBuf!, meta);
+              final sampleSecond = (meta['sampleSecond'] ?? 0) as int;
+              print('SP+ details: samples=${hrSeries.length} sampleSecond=$sampleSecond');
+              // Attempt to link with last summary for convenience
+              Map<String, dynamic> summary = {};
+              _onSpDetails?.call(summary, hrSeries, sampleSecond);
+              _spDetailsBuf = null; _spDetailsTotal = 0; _spDetailsReceived = 0; _spDetailsMeta = null;
+            }
+          }
+          return;
+        }
+      } else {
+        // Continuation chunk without header (summary or details)
+        final Uint8List payload = Uint8List.fromList(value);
+        if (_spSummaryTotal > 0 && _spSummaryBuf != null) {
+          final int end = (_spSummaryReceived + payload.length).clamp(0, _spSummaryTotal);
+          _spSummaryBuf!.setRange(_spSummaryReceived, end, payload.sublist(0, end - _spSummaryReceived));
+          _spSummaryReceived = end;
+          if (_spSummaryReceived >= _spSummaryTotal) {
+            final summaries = ResolveUtil.parseSportPlusSummaryBuffer(_spSummaryBuf!);
+            for (final s in summaries) {
+              final iso = DateTime.fromMillisecondsSinceEpoch(((s['startTime'] ?? 0) as int) * 1000, isUtc: true).toIso8601String();
+              print('SP+ summary: type=${s['sportType']} start=$iso dur=${s['duration']} dist=${s['distance']} cal=${s['calories']} hr[min/avg/max]=[${s['hrMin']}/${s['hrAvg']}/${s['hrMax']}]');
+            }
+            _onSpSummary?.call(summaries);
+            _spSummaryBuf = null; _spSummaryTotal = 0; _spSummaryReceived = 0;
+          }
+          return;
+        }
+        if (_spDetailsTotal > 0 && _spDetailsBuf != null) {
+          final int end = (_spDetailsReceived + payload.length).clamp(0, _spDetailsTotal);
+          _spDetailsBuf!.setRange(_spDetailsReceived, end, payload.sublist(0, end - _spDetailsReceived));
+          _spDetailsReceived = end;
+          if (_spDetailsReceived >= _spDetailsTotal) {
+            final meta = _spDetailsMeta ?? {};
+            final hrSeries = ResolveUtil.extractHrSeriesFromDetails(_spDetailsBuf!, meta);
+            final sampleSecond = (meta['sampleSecond'] ?? 0) as int;
+            print('SP+ details: samples=${hrSeries.length} sampleSecond=$sampleSecond');
+            Map<String, dynamic> summary = {};
+            _onSpDetails?.call(summary, hrSeries, sampleSecond);
+            _spDetailsBuf = null; _spDetailsTotal = 0; _spDetailsReceived = 0; _spDetailsMeta = null;
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      print('SP+ ingest error: $e');
+    }
+  }
+
+  // Build a portable workout JSON from a Sport+ summary and details
+  static Map<String, dynamic> buildWorkoutJson(
+    Map<String, dynamic> summary,
+    List<int> hrSeries,
+    int sampleSecond,
+  ) {
+    final int start = (summary['startTime'] ?? 0) as int;
+    final int duration = (summary['duration'] ?? 0) as int;
+    final int dist = (summary['distance'] ?? 0) as int;
+    final int calRaw = (summary['calories'] ?? 0) as int;
+    final int steps = (summary['steps'] ?? 0) as int;
+    final int sportType = (summary['sportType'] ?? 0) as int;
+
+    final int minHr = (summary['hrMin'] ?? (hrSeries.isEmpty ? 0 : hrSeries.reduce((a, b) => a < b ? a : b))) as int;
+    final int maxHr = (summary['hrMax'] ?? (hrSeries.isEmpty ? 0 : hrSeries.reduce((a, b) => a > b ? a : b))) as int;
+    final int avgHr = (summary['hrAvg'] ?? (hrSeries.isEmpty ? 0 : (hrSeries.reduce((a, b) => a + b) ~/ hrSeries.length))) as int;
+
+    // Many firmwares use fixed-point for calories. Keep raw and a normalized guess (kcal).
+    final double caloriesKcalGuess = calRaw / 1000.0;
+
+    return {
+      'id': '$sportType-$start',
+      'source': 'sport+',
+      'sportType': sportType,
+      'startTime': start,
+      'endTime': start + duration,
+      'durationSec': duration,
+      'distanceMeters': dist,
+      'steps': steps,
+      'caloriesRaw': calRaw,
+      'caloriesKcal': double.parse(caloriesKcalGuess.toStringAsFixed(1)),
+      'hr': {
+        'sampleSecond': sampleSecond,
+        'min': minHr,
+        'avg': avgHr,
+        'max': maxHr,
+        'samples': hrSeries,
+      },
+    };
+  }
+>>>>>>> origin/main
   static Uint8List runDeviceCallibration(int type) {
     return Uint8List.fromList([0xA1, type]);
   }
@@ -577,25 +862,23 @@ class QCBandSDK {
 //     return Uint8List.fromList(value);
 //   }
 
-//   ///发送运动模式心跳包(配合"EnterActivityMode"使用)
-//   ///当手环是通过APP进入多运动模式后，APP必须每隔1秒发送一个数据给手环，否则手环会退出多运动模式
-//   ///Send a sports mode heartbeat packet (used in conjunction with 'EnterActivityMode')
-//   ///When the bracelet enters multi sport mode through the APP, the APP must send data to the bracelet every 1 second, otherwise the bracelet will exit multi sport mode
-//   static Uint8List sendHeartPackage(double distance, int space, int rssi) {
-//     List<int> value = _generateInitValue();
-//     final bData = ByteData(8);
-//     int min = space ~/ 60;
-//     int second = space % 60;
-//     bData.setFloat32(0, distance, Endian.little);
-//     final List<int> distanceValue = bData.buffer.asUint8List(0, 4);
-//     value[0] = DeviceConst.CMD_heart_package;
-//     arrayCopy(distanceValue, 0, value, 1, distanceValue.length);
-//     value[5] = min;
-//     value[6] = second;
-//     value[7] = rssi;
-//     _crcValue(value);
-//     return Uint8List.fromList(value);
-//   }
+  /// 发送运动模式心跳包 (App 控制多运动模式的保活)
+  /// Every 1 second while in phone-controlled multi-sport mode, send this to prevent exit
+  static Uint8List sendHeartPackage(double distanceMeters, int elapsedSeconds, int rssi) {
+    final List<int> value = _generateInitValue();
+    final bData = ByteData(8);
+    final int min = elapsedSeconds ~/ 60;
+    final int second = elapsedSeconds % 60;
+    bData.setFloat32(0, distanceMeters, Endian.little);
+    final List<int> distanceValue = bData.buffer.asUint8List(0, 4);
+    value[0] = 0x5A; // CMD_heart_package (90)
+    arrayCopy(distanceValue, 0, value, 1, distanceValue.length);
+    value[5] = min;
+    value[6] = second;
+    value[7] = rssi;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 
 //   ///获取某天总数据
 //   ///0:表⽰是从最新的位置开始读取(最多50组数据)  2:表⽰接着读取(当数据总数⼤于50的时候) 0x99:表⽰删除所有运动数据
@@ -833,6 +1116,28 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+  
+  // New: generic phone-sport command with sport type
+  // status: 1=start, 2=pause, 3=continue, 4=stop
+  // sportType examples: 4=Walk, 7=Run, 8=Hike, 9=Cycling, 10=Other, 20..36, 60
+  static Uint8List phoneSport(int status, {int sportType = 4}) {
+    final List<int> value = _generateInitValue();
+    value[0] = 119;
+    value[1] = status;
+    value[2] = sportType;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // Backward-compatible helpers with sportType parameter
+  static Uint8List startWorkOutWithType({int sportType = 4}) =>
+      phoneSport(QcBandSdkConst.ACTION_START, sportType: sportType);
+  static Uint8List pauseWorkOutWithType({int sportType = 4}) =>
+      phoneSport(QcBandSdkConst.ACTION_PAUSE, sportType: sportType);
+  static Uint8List continueWorkOutWithType({int sportType = 4}) =>
+      phoneSport(QcBandSdkConst.ACTION_CONTINUE, sportType: sportType);
+  static Uint8List stopWorkOutWithType({int sportType = 4}) =>
+      phoneSport(QcBandSdkConst.ACTION_STOP, sportType: sportType);
 
   static Uint8List getAlarms() {
     // 0xbc2c01007e8001
@@ -997,6 +1302,13 @@ class QCBandSDK {
 
     log('Attempting to write: ${Uint8List.fromList(value)}');
 
+    return Uint8List.fromList(value);
+  }
+  
+  static Uint8List rebootDevice() {
+    final List<int> value = _generateInitValue();
+    value[0] = 8;
+    _crcValue(value);
     return Uint8List.fromList(value);
   }
 //   ///重启设备
