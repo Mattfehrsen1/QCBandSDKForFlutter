@@ -323,7 +323,6 @@ class QCBandSDK {
     return ResolveUtil.setMethodError(_getBcdValue(value[0]).toString());
   }
 
-<<<<<<< HEAD
   // ================= Alarms (classic 0x23/0x24) =================
   static Uint8List buildSetAlarmClassic(Alarm alarm) {
     final List<int> value = _generateInitValue();
@@ -349,7 +348,6 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
-=======
   // ================= Vendor Serial (0xBC) helpers and Sport+ =================
   // Build vendor packet using ResolveUtil.addHeader
   static Uint8List buildVendorPacket(int cmd, [Uint8List? payload]) {
@@ -630,7 +628,6 @@ class QCBandSDK {
       },
     };
   }
->>>>>>> origin/main
   static Uint8List runDeviceCallibration(int type) {
     return Uint8List.fromList([0xA1, type]);
   }
