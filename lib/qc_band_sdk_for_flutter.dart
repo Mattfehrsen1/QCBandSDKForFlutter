@@ -169,6 +169,10 @@ class QCBandSDK {
       case QcBandSdkConst.cmdHrv:
         // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
         return ResolveUtil.getHrvTestData(value);
+      case QcBandSdkConst.cmdPressureInt:
+        return ResolveUtil.parsePressureDataFrames(value);
+      case QcBandSdkConst.cmdPressureSettingInt:
+        return ResolveUtil.parsePressureSetting(value);
       case 120: // phone sport notify (0x78)
         return ResolveUtil.parseLiveSportNotify(value);
       // case DeviceConst.CMD_Reset:
@@ -983,6 +987,14 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  // Request device function support (cmd 0x3C = 60)
+  static Uint8List getDeviceFunctionSupport() {
+    final List<int> value = _generateInitValue();
+    value[0] = 60; // QcBandSdkConst.cmdDeviceFunctionSupport
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
   static Uint8List GetStepOfToday() {
     final List<int> value = _generateInitValue();
     value[0] = QcBandSdkConst.cmdStepDataToday;
@@ -1074,6 +1086,35 @@ class QCBandSDK {
   static Uint8List getBloodPressure(int offset) {
     final List<int> value = _generateInitValue();
     value[0] = QcBandSdkConst.getBloodPressure;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // ===== Stress (Pressure) =====
+  // Read stress data for a given day offset (0=today, 1..6 previous days)
+  static Uint8List getStressByOffset(int offset) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdPressureInt; // 55
+    value[1] = offset & 0xFF;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // Read auto-stress setting (enable/disable)
+  static Uint8List getStressSetting() {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdPressureSettingInt; // 54
+    value[1] = 0x01; // read
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // Write auto-stress setting
+  static Uint8List setStressSetting(bool enable) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdPressureSettingInt; // 54
+    value[1] = 0x02; // write
+    value[2] = enable ? 0x01 : 0x00;
     _crcValue(value);
     return Uint8List.fromList(value);
   }

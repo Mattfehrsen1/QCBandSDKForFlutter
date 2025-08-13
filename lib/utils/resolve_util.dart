@@ -932,6 +932,91 @@ class ResolveUtil {
     return maps;
   }
 
+  // Parse stress (pressure) multi-frame response (cmd 55)
+  // Returns a map with keys: dataType(55), end(bool), data: {date, interval, indices[], values[]}
+  static Map<String, dynamic> parsePressureDataFrames(List<int> value) {
+    final Map<String, dynamic> result = {
+      DeviceKey.DataType: QcBandSdkConst.cmdPressure,
+      DeviceKey.End: false,
+    };
+    // Allow empty frames
+    if (value.isEmpty) {
+      result[DeviceKey.End] = false;
+      return result;
+    }
+    // UART includes cmd id at [0] (0x37=55). Frame type starts at [1].
+    int frameType = value[0] & 0xFF;
+    int startIndex = 0;
+    if (frameType == QcBandSdkConst.cmdPressureInt && value.length >= 2) {
+      frameType = value[1] & 0xFF;
+      startIndex = 1;
+    }
+    // End marker
+    if (frameType == 0xFF) {
+      result[DeviceKey.End] = true;
+      return result;
+    }
+    // We keep minimal, stateless parsing per incoming chunk so UI can accumulate externally.
+    if (frameType == 0x00) {
+      // Header: [cmd?, 0, size, interval]
+      final int size = value.length > startIndex + 1 ? (value[startIndex + 1] & 0xFF) : 0;
+      final int intervalMin = value.length > startIndex + 2 ? (value[startIndex + 2] & 0xFF) : 0;
+      result[DeviceKey.Data] = {
+        'frame': 'header',
+        'size': size,
+        'intervalMinutes': intervalMin,
+      };
+      return result;
+    }
+    if (frameType == 0x01) {
+      // First data frame: [cmd?, 1, offset, payload..., crc]
+      final int offsetDays = value.length > startIndex + 1 ? (value[startIndex + 1] & 0xFF) : 0;
+      // Payload excludes header bytes and trailing CRC
+      final int payloadStart = startIndex + 2;
+      final int payloadEnd = value.length > 0 ? value.length - 1 : value.length;
+      final List<int> payload = payloadEnd > payloadStart ? value.sublist(payloadStart, payloadEnd) : <int>[];
+      result[DeviceKey.Data] = {
+        'frame': 'first',
+        'offsetDays': offsetDays,
+        'payload': payload,
+      };
+      return result;
+    }
+    // Subsequent data frames: [n, payload...]
+    final int payloadStart = startIndex + 1;
+    final int payloadEnd = value.length > 0 ? value.length - 1 : value.length;
+    final List<int> payload = payloadEnd > payloadStart ? value.sublist(payloadStart, payloadEnd) : <int>[];
+    result[DeviceKey.Data] = {
+      'frame': 'next',
+      'index': frameType,
+      'payload': payload,
+    };
+    return result;
+  }
+
+  // Parse stress setting response (cmd 54)
+  static Map<String, dynamic> parsePressureSetting(List<int> value) {
+    final Map<String, dynamic> result = {
+      DeviceKey.DataType: QcBandSdkConst.cmdPressureSetting,
+      DeviceKey.End: true,
+    };
+    // Expect subData: [cmd(ignored), mode, enable]
+    if (value.length >= 3) {
+      final int mode = value[1] & 0xFF;
+      bool enabled = false;
+      if (mode == 0x02 && value.length >= 3) {
+        enabled = (value[2] & 0xFF) == 0x01;
+      } else if (mode == 0x01 && value.length >= 3) {
+        enabled = (value[2] & 0xFF) == 0x01; // some firmwares echo current state
+      }
+      result[DeviceKey.Data] = {
+        'enabled': enabled,
+        'mode': mode,
+      };
+    }
+    return result;
+  }
+
 //   ///闹钟数据
 //   static Map getClockData(List<int> value) {
 //     Map maps = {

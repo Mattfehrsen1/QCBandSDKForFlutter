@@ -22,6 +22,8 @@ import 'package:qc_band_sdk_for_flutter/bean/models/sleepModel.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/alarm.dart';
 import 'package:qc_band_sdk_for_flutter/utils/resolve_util.dart';
 import 'sports_monitor_page.dart';
+import 'package:qc_band_sdk_for_flutter/utils/feature_support.dart';
+import 'package:qc_band_sdk_for_flutter/utils/devicekey.dart';
 
 class DeviceScreen extends StatefulWidget {
   final BluetoothDevice device;
@@ -70,6 +72,140 @@ class _DeviceScreenState extends State<DeviceScreen> {
   int _liveCalories = 0; // calories
   final List<int> _hrSamples = <int>[]; // accumulating HR samples during workout
   String _vendorStatus = '';
+  int? _supportMask; // parsed function support bitmask
+  bool? _bloodSugarSupported;
+  bool? _bodyTempSupported;
+  int _stressDays = 1; // 1..7
+  bool _stressBusy = false;
+
+  Future<void> _getStressForOffset(int offset) async {
+    if (_bluetoothCharacteristicWrite == null) {
+      print('Stress: write characteristic not ready');
+      return;
+    }
+    print('[Stress] request offset=$offset');
+    final cmd = QCBandSDK.getStressByOffset(offset);
+    int expectedSize = -1;
+    int intervalMinutes = 0;
+    final List<int> payloadBuffer = [];
+    bool completed = false;
+
+    final completer = Completer<void>();
+    late StreamSubscription<List<int>> subStd;
+    subStd = _bluetoothCharacteristicNotification.value.listen((value) {
+      try {
+        final parsed = ResolveUtil.parsePressureDataFrames(value);
+        if (parsed['dataType'] == QcBandSdkConst.cmdPressure) {
+          final isEnd = parsed[DeviceKey.End] == true;
+          final data = parsed[DeviceKey.Data];
+          if (data is Map) {
+            final frame = data['frame'];
+            if (frame == 'header') {
+              expectedSize = (data['size'] ?? -1) as int;
+              intervalMinutes = (data['intervalMinutes'] ?? 0) as int;
+              print('[Stress] header size=$expectedSize interval=$intervalMinutes');
+            } else if (frame == 'first') {
+              final pl = (data['payload'] as List).cast<int>();
+              payloadBuffer.addAll(pl);
+              print('[Stress] first frame bytes=${pl.length}');
+            } else if (frame == 'next') {
+              final idx = (data['index'] ?? -1) as int;
+              final pl = (data['payload'] as List).cast<int>();
+              payloadBuffer.addAll(pl);
+              print('[Stress] frame #$idx bytes=${pl.length}');
+              if (expectedSize > 0 && idx == expectedSize - 1) {
+                completed = true;
+              }
+            }
+          }
+          if (isEnd || completed) {
+            subStd.cancel();
+            DateTime date = DateTime.now().subtract(Duration(days: offset));
+            if (frameTypeFromData(data: data) == 0x01 && data['offsetDays'] is int) {
+              final int off = data['offsetDays'] as int;
+              date = DateTime.now().subtract(Duration(days: off));
+            }
+            final dateStr = '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+            print('[Stress] done offset=$offset date=$dateStr samples=${payloadBuffer.length} interval=$intervalMinutes');
+            Snackbar.show(ABC.c, 'Stress $dateStr: ${payloadBuffer.length} samples, interval $intervalMinutes min', success: true);
+            completer.complete();
+          }
+        }
+      } catch (e) {
+        print('Stress parse error: $e');
+      }
+    });
+    try {
+      await _bluetoothCharacteristicWrite.write(cmd);
+    } catch (e) {
+      print('Stress write error: $e');
+      await subStd.cancel();
+      return;
+    }
+    // Safety timeout
+    Future.delayed(const Duration(seconds: 8), () {
+      if (!completer.isCompleted) {
+        print('[Stress] timeout offset=$offset');
+        subStd.cancel();
+        completer.complete();
+      }
+    });
+    await completer.future;
+  }
+
+  int? frameTypeFromData({required Map data}) {
+    final f = data['frame'];
+    if (f == 'header') return 0x00;
+    if (f == 'first') return 0x01;
+    if (f == 'next') return 0x02; // generic
+    return null;
+  }
+
+  Future<void> _getStressNDays(int days) async {
+    if (_stressBusy) return;
+    setState(() => _stressBusy = true);
+    try {
+      for (int offset = 0; offset < days; offset++) {
+        await _getStressForOffset(offset);
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+    } finally {
+      if (mounted) setState(() => _stressBusy = false);
+    }
+  }
+
+  void _handleFunctionSupportResponse(List<int> value, {required String source}) {
+    try {
+      if (value.isEmpty) return;
+      bool looksLikeCmd60 = value[0] == 60 || value.contains(60);
+      if (!looksLikeCmd60) return;
+      int mask = 0;
+      if (value.length >= 5 && value[0] == 60) {
+        mask = (value[1] & 0xFF) |
+            ((value[2] & 0xFF) << 8) |
+            ((value[3] & 0xFF) << 16) |
+            ((value[4] & 0xFF) << 24);
+      } else {
+        final idx = value.indexOf(60);
+        if (idx >= 0 && value.length >= idx + 5) {
+          mask = (value[idx + 1] & 0xFF) |
+              ((value[idx + 2] & 0xFF) << 8) |
+              ((value[idx + 3] & 0xFF) << 16) |
+              ((value[idx + 4] & 0xFF) << 24);
+        }
+      }
+      if (mask != 0) {
+        print('[Compat] ← ' + source + ' response len=' + value.length.toString() + ' mask=0x' + mask.toRadixString(16));
+        setState(() {
+          _supportMask = mask;
+          _bloodSugarSupported = FeatureSupport.supportsBloodSugar(mask);
+          _bodyTempSupported = FeatureSupport.supportsBodyTemperature(mask);
+        });
+      }
+    } catch (e) {
+      print('Compat parse error: ' + e.toString());
+    }
+  }
 
   Future<void> _discoverServicesAndCharacteristics(
       BluetoothDevice device) async {
@@ -1831,6 +1967,69 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               buildMtuTile(context),
               ..._buildServiceTiles(context, widget.device),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    final cmd = QCBandSDK.getDeviceFunctionSupport();
+                    print('[Compat] → request cmd 60: ${cmd.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+                    await _vendorWrite(cmd);
+
+                    // Listen for response on both potential notify channels
+                    final sub1 = _secondbluetoothCharacteristicNotification.value.listen((value) {
+                      final hex = value.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ');
+                      print('[Compat] raw vendor notify len=${value.length} data=$hex');
+                      _handleFunctionSupportResponse(value, source: 'vendor');
+                    });
+                    final sub2 = _bluetoothCharacteristicNotification.value.listen((value) {
+                      final hex = value.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ');
+                      print('[Compat] raw standard notify len=${value.length} data=$hex');
+                      _handleFunctionSupportResponse(value, source: 'standard');
+                    });
+
+                    // Cancel after a short window
+                    Future.delayed(const Duration(seconds: 10), () {
+                      sub1.cancel();
+                      sub2.cancel();
+                    });
+                  } catch (e) {
+                    print('Function support request failed: $e');
+                  }
+                },
+                child: const Text('Check Device Compatibility'),
+              ),
+              if (_supportMask != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    'Blood sugar: ${_bloodSugarSupported == true ? "Yes" : "No"} | Body temp: ${_bodyTempSupported == true ? "Yes" : "No"}',
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                child: Row(
+                  children: [
+                    const Text('Stress days:'),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: _stressDays,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1')),
+                        DropdownMenuItem(value: 2, child: Text('2')),
+                        DropdownMenuItem(value: 3, child: Text('3')),
+                        DropdownMenuItem(value: 4, child: Text('4')),
+                        DropdownMenuItem(value: 5, child: Text('5')),
+                        DropdownMenuItem(value: 6, child: Text('6')),
+                        DropdownMenuItem(value: 7, child: Text('7')),
+                      ],
+                      onChanged: (v) => setState(() => _stressDays = v ?? 1),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: _stressBusy ? null : () => _getStressNDays(_stressDays),
+                      child: Text(_stressBusy ? 'Fetching…' : 'Get Stress ($_stressDays d)')),
+                  ],
+                ),
+              ),
               TextButton(
                   onPressed: () {
                     // Notify Listenner of the Command
