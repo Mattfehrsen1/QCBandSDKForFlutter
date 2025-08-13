@@ -1,6 +1,0 @@
-package com.luck.picture.lib.photoview;
-
-/* loaded from: classes3.dex */
-public interface OnScaleChangedListener {
-    void onScaleChange(float f, float f2, float f3);
-}
