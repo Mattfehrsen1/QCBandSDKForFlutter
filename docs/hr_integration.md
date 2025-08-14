@@ -1,63 +1,106 @@
-## Heart Rate integration (aligned with production app)
+## Heart Rate integration (shareable overview)
 
-This document explains the updated heart rate commands and parsing flow used by the Flutter SDK. The implementation matches the protocol observed in the production Android app.
+Simple overview of how HR works in this SDK. Matches the production Android app protocol.
 
-### Concepts
+### What’s supported
 
-- History heart rate (cmd 21) returns a full day’s series in multiple frames, with a header indicating packet count and sampling range.
-- Realtime heart (cmd 105 type 6) controls the device’s realtime HR stream; values are notified under cmd 30.
-- Auto HR setting is read/written via cmd 22.
+- History HR (full day, cmd 21)
+- Realtime HR control (start/stop over cmd 105 type=6; values on cmd 30)
+- Automatic HR setting read/write (cmd 22)
 
-### Commands
+### Quick start: History HR (cmd 21)
 
-- History HR request (cmd 21):
-  - Build with a 4‑byte little‑endian timestamp after the command byte.
-  - SDK helper: `QCBandSDK.buildReadHeartRateCommand(unixTs)`.
+1) Choose the day you want (use local midnight), convert to Unix seconds:
+```dart
+// Local midnight for a given day
+final localMidnight = DateTime(target.year, target.month, target.day);
+final unixTs = localMidnight.toUtc().millisecondsSinceEpoch ~/ 1000;
+```
 
-- Auto HR setting (cmd 22):
-  - Read: `[22, 1, 0, ...]` → `QCBandSDK.GetAutomaticHRMonitoring()`
-  - Write: `[22, 2, enable(1|2), interval(min)]` → `QCBandSDK.SetAutomaticHRMonitoring(enable, interval)`
+2) Build and write the history request:
+```dart
+final cmd = QCBandSDK.buildReadHeartRateCommand(unixTs);
+await standardWriteCharacteristic.write(cmd);
+```
 
-- Realtime heart control:
-  - Preferred: cmd 105 with `type=6` and `sub=action` → `QCBandSDK.realtimeHeartControl(action)`
-    - Start: `QCBandSDK.startRealtimeHeart()`
-    - Stop: `QCBandSDK.stopRealtimeHeart()`
-  - Legacy (still available): cmd 30 with sub‑action → `QCBandSDK.liveHeartData(action)` / `QCBandSDK.GetRealTimeHeartRate()`
+3) Listen to notifications and parse:
+```dart
+standardNotifyStream.listen((value) {
+  final parsed = QCBandSDK.ingestStandardNotification(value);
+  if (parsed['dataType'] == 'HeartRateData') {
+    final end = parsed['end'] == true || parsed['End'] == true || parsed['dataEnd'] == true;
+    final data = parsed['data'] ?? parsed['Data'] ?? parsed['dicData'];
+    if (data is Map) {
+      // While streaming you may get progress
+      final progress = data['progress'];      // optional
+      final total = data['totalExpected'];    // optional (288)
 
-### Notifications parsing
+      // On completion you get the final array
+      final range = data['range'];            // minutes per sample (usually 5)
+      final arr = data['heartRateArray'];     // length 288 at 5‑min cadence
+      final utc = data['utcTime'];            // start-of-day Unix seconds
+      if (end == true && arr is List) {
+        // Use arr (5‑min cadence). Future slots for today are zeroed.
+      }
+    }
+  }
+});
+```
 
-- History HR (cmd 21):
-  - Routed via `QCBandSDK.DataParsingWithData` to `ResolveUtil.handleIncomingDataHeartData(data)`.
-  - Frame types:
-    - Header: `[21, 0, size, range, ...]` → allocates a buffer of `size*13`
-    - First data: `[21, 1, ts(4 LE), payload...]` → sets `utcTime` (timezone adjusted), appends payload
-    - Subsequent: `[21, n, payload...]` → appends 13‑byte blocks. End when `n == size-1` or `0xFF` seen.
-  - On completion the 288‑length daily array is produced. If `range != 5`, samples are mapped to nearest 5‑minute slot.
-  - Today’s future slots are zeroed like the app.
-  - Emitted map:
-    - `dataType: 'HeartRateData'`
-    - `end: true|false`
-    - `data: { utcTime, range, heartRateArray, totalValues | progress }`
+Protocol details (handled for you):
+- Frames: header `[21,0,size,range,...]`, first `[21,1,ts(LE),payload...]`, then `[21,n,payload...]`.
+- The SDK assembles payloads, maps to 5‑minute cadence (288 points). If `range != 5`, values are resampled to nearest 5‑min slot.
 
-- Realtime HR (cmd 30):
-  - Routed to `ResolveUtil.parseRealtimeHeart(value)`.
-  - Returns: `{ dataType: 'RealtimeHeartRate', end: true, data: { HeartRate: bpm } }`
+### Example: Today and “3 days ago”
 
-### Public SDK API (selected)
+```dart
+Future<void> getToday() async {
+  final ts = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+  await standardWriteCharacteristic.write(QCBandSDK.buildReadHeartRateCommand(ts));
+}
 
-- Build history request: `QCBandSDK.buildReadHeartRateCommand(unixTs)`
-- Parse notifications: `QCBandSDK.ingestStandardNotification(value)`
-- Auto HR read/write:
-  - `QCBandSDK.GetAutomaticHRMonitoring()`
-  - `QCBandSDK.SetAutomaticHRMonitoring(enable, interval)`
-- Realtime HR control:
-  - `QCBandSDK.startRealtimeHeart()`, `QCBandSDK.stopRealtimeHeart()` (cmd 105)
-  - Legacy: `QCBandSDK.GetRealTimeHeartRate()`, `QCBandSDK.liveHeartData(action)` (cmd 30)
+Future<void> getThreeDaysAgo() async {
+  final now = DateTime.now();
+  final threeDaysAgoLocalMidnight = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 3));
+  final ts = threeDaysAgoLocalMidnight.toUtc().millisecondsSinceEpoch ~/ 1000;
+  await standardWriteCharacteristic.write(QCBandSDK.buildReadHeartRateCommand(ts));
+}
+```
+
+### Realtime HR
+
+- Control: cmd 105, type=6. Helpers:
+```dart
+await standardWriteCharacteristic.write(QCBandSDK.startRealtimeHeart());
+// ... later
+await standardWriteCharacteristic.write(QCBandSDK.stopRealtimeHeart());
+```
+
+- Data: arrives on cmd 30; parsing helper:
+```dart
+final parsed = QCBandSDK.ingestStandardNotification(value);
+if (parsed['dataType'] == 'RealtimeHeartRate') {
+  final data = parsed['data'] ?? parsed['Data'] ?? parsed['dicData'];
+  final bpm = data['HeartRate'] ?? data['heartRate'];
+}
+```
+
+- Legacy control (still available): `QCBandSDK.GetRealTimeHeartRate()` / `QCBandSDK.liveHeartData(action)`. Prefer 105‑based control.
+
+### Auto HR setting (cmd 22)
+
+```dart
+// Read
+await standardWriteCharacteristic.write(QCBandSDK.GetAutomaticHRMonitoring());
+
+// Write (enable = 1 or 2, interval in minutes)
+await standardWriteCharacteristic.write(QCBandSDK.SetAutomaticHRMonitoring(enable, interval));
+```
 
 ### Notes
 
-- Timezone: Unix time in history responses is adjusted to match app behavior.
-- Range: Consumers should treat the produced `heartRateArray` as 5‑minute cadence for 24h (288 points).
-- Backward compatibility: legacy realtime functions remain available; prefer the 105‑based control for consistency.
+- Only one history request at a time per device is recommended.
+- History output is normalized to a 5‑minute cadence day array of length 288.
+- Timestamps are handled to match the app’s behavior (timezone/local midnight alignment).
 
 
