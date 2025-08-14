@@ -746,6 +746,119 @@ class ResolveUtil {
     };
   }
 
+  // ========================= SpO2 (blood oxygen) parsers =========================
+  // Classic 10-byte records per notification. Stateless per notify; the caller should
+  // accumulate samples across multiple notifications until end=true.
+  // Layout per 10-byte block: [cmd, sub?, YY, MM, DD, hh, mm, ss, SpO2, (unused?)]
+  // In our historical codebase, timestamp bytes are at indices 3..8 and value at 9 within each 10-byte block.
+  static Map<String, dynamic> parseSpO2Classic(List<int> value) {
+    final Map<String, dynamic> out = {
+      'dataType': 'SpO2Classic',
+      'end': false,
+      'data': {
+        'samples': <Map<String, dynamic>>[],
+      },
+    };
+
+    if (value.isEmpty) return out;
+
+    // Determine if this looks like classic SpO2 payload: length >= 10; accept partial tail safely
+    final int len = value.length;
+    if (len < 10) {
+      return out;
+    }
+
+    final List<Map<String, dynamic>> samples = [];
+    final int blocks = len ~/ 10; // parse only complete 10-byte blocks
+    for (int i = 0; i < blocks; i++) {
+      final int base = i * 10;
+      // Guard bounds for BCD timestamp at indices 3..8 relative to payload
+      final int y = (base + 3 < len) ? int.tryParse(_bcd2String(value[base + 3])) ?? 0 : 0;
+      final int m = (base + 4 < len) ? int.tryParse(_bcd2String(value[base + 4])) ?? 1 : 1;
+      final int d = (base + 5 < len) ? int.tryParse(_bcd2String(value[base + 5])) ?? 1 : 1;
+      final int hh = (base + 6 < len) ? int.tryParse(_bcd2String(value[base + 6])) ?? 0 : 0;
+      final int mm = (base + 7 < len) ? int.tryParse(_bcd2String(value[base + 7])) ?? 0 : 0;
+      final int ss = (base + 8 < len) ? int.tryParse(_bcd2String(value[base + 8])) ?? 0 : 0;
+      final int spo2 = (base + 9 < len) ? (value[base + 9] & 0xFF) : 0;
+
+      final int year = 2000 + y;
+      DateTime ts;
+      try {
+        ts = DateTime(year, m.clamp(1, 12), d.clamp(1, 31), hh.clamp(0, 23), mm.clamp(0, 59), ss.clamp(0, 59));
+      } catch (_) {
+        ts = DateTime.now();
+      }
+      samples.add({
+        'timestamp': ts.toIso8601String(),
+        'spo2': spo2,
+      });
+    }
+
+    // End detection: if the last byte of the payload is 0xFF, mark end=true
+    if (value.isNotEmpty && (value[value.length - 1] & 0xFF) == 0xFF) {
+      out['end'] = true;
+    }
+
+    (out['data'] as Map<String, dynamic>)['samples'] = samples;
+    // Friendly log
+    final String lastTs = samples.isNotEmpty ? (samples.last['timestamp'] as String) : 'n/a';
+    final bool isEnd = out['end'] == true;
+    print('[SpO2 Classic] Parsed ${samples.length} samples in this packet. Last time: $lastTs. End of history: $isEnd');
+    return out;
+  }
+
+  // Vendor 0xBC path (cmd=0x2A) returns per-day trend chunks: 49 bytes per day
+  // [dateOffsetDays][min,max x 24]
+  static Map<String, dynamic> parseSpO2VendorPayload(Uint8List payload) {
+    final Map<String, dynamic> out = {
+      'dataType': 'SpO2Trend',
+      'end': true,
+      'data': {
+        'days': <Map<String, dynamic>>[],
+      },
+    };
+
+    if (payload.isEmpty || (payload.length % 49) != 0) {
+      return out;
+    }
+
+    final List<Map<String, dynamic>> days = [];
+    final int dayCount = payload.length ~/ 49;
+    for (int i = 0; i < dayCount; i++) {
+      final int base = i * 49;
+      final int offsetDays = payload[base] & 0xFF;
+      final DateTime date = DateTime.now().subtract(Duration(days: offsetDays));
+      final String dateStr = '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+      final List<int> minList = List<int>.filled(24, 0);
+      final List<int> maxList = List<int>.filled(24, 0);
+      for (int h = 0; h < 24; h++) {
+        final int p = base + 1 + (h * 2);
+        if (p + 1 < payload.length) {
+          minList[h] = payload[p] & 0xFF;
+          maxList[h] = payload[p + 1] & 0xFF;
+        }
+      }
+
+      days.add({
+        'date': dateStr,
+        'min': minList,
+        'max': maxList,
+      });
+    }
+
+    (out['data'] as Map<String, dynamic>)['days'] = days;
+    // Friendly log
+    final int nDays = days.length;
+    if (nDays == 0) {
+      print('[SpO2 Trend] No day records were found in the payload.');
+    } else {
+      final sample = days.first;
+      print('[SpO2 Trend] Parsed $nDays day(s) of min/max arrays. Example → ${sample['date']}: min[24]=${(sample['min'] as List).length}, max[24]=${(sample['max'] as List).length}');
+    }
+    return out;
+  }
+
 //   ///运动提醒
 //   static Map getActivityAlarm(List<int> value) {
 //     Map mapData = {
@@ -1203,6 +1316,34 @@ class ResolveUtil {
         'enabled': enabled,
         'mode': mode,
       };
+    }
+    return result;
+  }
+
+  // Parse auto SpO2 setting (cmd 44).
+  // Layout mirrors stress setting: [cmd=44, mode, enable]
+  // mode: 0x01=read response, 0x02=write response
+  static Map<String, dynamic> parseAutoBloodOxygenSetting(List<int> value) {
+    final Map<String, dynamic> result = {
+      DeviceKey.DataType: QcBandSdkConst.cmdAutoBloodOxygen,
+      DeviceKey.End: true,
+    };
+    if (value.length >= 3) {
+      final int mode = value[1] & 0xFF;
+      bool enabled = false;
+      if ((mode == 0x02 || mode == 0x01) && value.length >= 3) {
+        enabled = (value[2] & 0xFF) == 0x01;
+      }
+      int? interval;
+      if (value.length >= 4) {
+        interval = value[3] & 0xFF;
+      }
+      result[DeviceKey.Data] = {
+        'enabled': enabled,
+        'mode': mode,
+        if (interval != null) 'intervalMinutes': interval,
+      };
+      print('[Auto SpO2] Setting response → enabled=$enabled, intervalMin=${interval ?? 'n/a'}');
     }
     return result;
   }

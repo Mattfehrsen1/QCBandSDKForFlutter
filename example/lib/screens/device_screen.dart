@@ -2012,26 +2012,64 @@ class _DeviceScreenState extends State<DeviceScreen> {
     // This packet will be: [0xBC, 0x2A, 0x01, 0x00, <CRC_LSB>, <CRC_MSB>, 0xFF]
 
     // Send the constructed packet to the write characteristic
-    await _secondbluetoothCharacteristicWrite.write(
-      QCBandSDK.getBloodOxygen(),
-    );
-    print(
-        'Sent Blood Oxygen request: ${QCBandSDK.getBloodOxygen().map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
-
-    _secondbluetoothCharacteristicNotification.value.listen((value) {
-      // Handle the received value (List<int>)
-      print(
-          'Received notification: ${QcBandSdkConst.serialPortNotify} \n ${value.length}');
-      if (value.isNotEmpty) {
-        List<BloodOxygenEntity> parsedData =
-            parseBloodOxygenData(Uint8List.fromList(value));
-        parsedData.forEach((entity) {
-          print(entity.toString());
-        });
-        // print(recievedHRVData);
-        // log('Received Sleep: $value  ');
+    // Classic path: request latest, then continue until end
+    List<Map<String, dynamic>> classicSamples = [];
+    print('[UI] Starting SpO2 history sync (classic). We will fetch latest records, then continue until finished.');
+    await _bluetoothCharacteristicWrite.write(QCBandSDK.getSpO2HistoryLatest());
+    print('[UI] SpO2 request sent: Latest batch. Waiting for device notifications...');
+    final sub = _bluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isEmpty) return;
+      if (value[0] == 42) {
+        final res = QCBandSDK.ingestStandardNotification(value);
+        final data = res['data'] ?? {};
+        final samples = (data['samples'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        classicSamples.addAll(samples);
+        final end = (res['end'] == true);
+        final lastTs = classicSamples.isNotEmpty ? classicSamples.last['timestamp'] : 'n/a';
+        print('[UI] SpO2 classic progress → total samples so far: ${classicSamples.length}. Last timestamp: $lastTs.');
+        if (!end) {
+          print('[UI] Requesting next SpO2 batch (continue)...');
+          _bluetoothCharacteristicWrite.write(QCBandSDK.getSpO2HistoryContinue());
+        } else {
+          print('[UI] SpO2 history complete. Total samples: ${classicSamples.length}.');
+        }
+      }
+      // Auto SpO2 setting read/write (cmd 44)
+      if (value[0] == QcBandSdkConst.cmdAutoBloodOxygenInt) {
+        final res = QCBandSDK.ingestStandardNotification(value);
+        final data = res['data'] ?? {};
+        final enabled = data['enabled'];
+        final interval = data['intervalMinutes'];
+        print('[UI] Auto SpO2 setting → enabled=$enabled, interval=${interval ?? 'n/a'} min');
       }
     });
+    // Optional safety timeout
+    Future.delayed(Duration(seconds: 10), () async { await sub.cancel(); print('[UI] SpO2 classic sync timed out after 10s. You can press Continue again if needed.'); });
+  }
+
+  getSpO2TrendVendor() async {
+    // Register a one-shot listener to log assembled vendor trend
+    QCBandSDK.setSpO2TrendListener((trend) {
+      final days = (trend['data']?['days'] as List?)?.length ?? 0;
+      print('[UI] SpO2 trend done. Number of days received: $days');
+      if (days > 0) {
+        final first = (trend['data']?['days'] as List).first;
+        print('[UI] Example — Date: ${first['date']}\n       Min values (24h): ${first['min']}\n       Max values (24h): ${first['max']}');
+      }
+    });
+
+    // Send vendor request on secondary write characteristic
+    print('[UI] Requesting SpO2 trend via vendor channel (0xBC/0x2A). This returns per-hour min/max arrays per day.');
+    await _secondbluetoothCharacteristicWrite.write(QCBandSDK.getBloodOxygen());
+    print('[UI] Vendor request sent. Assembling chunks...');
+
+    // Feed incoming vendor notifications into QCBandSDK assembler
+    final sub = _secondbluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isEmpty) return;
+      QCBandSDK.ingestVendorNotification(value);
+    });
+    // Safety timeout
+    Future.delayed(Duration(seconds: 10), () async { await sub.cancel(); print('[UI] Vendor SpO2 trend fetch timed out after 10s.'); });
   }
 
   setBloodPressureDeviceTo30Min() async {
@@ -2596,6 +2634,38 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 },
                 child: Text('Get BloodOxygen History'),
               ),
+              TextButton(
+                onPressed: () {
+                  getSpO2TrendVendor();
+                },
+                child: Text('Get SpO2 Trend (vendor)'),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Reading auto SpO2 monitor setting...');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.getAutoSpO2Setting());
+                  },
+                  child: const Text('Read Auto SpO2'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Enabling auto SpO2 (every 15 min)...');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.setAutoSpO2Setting(enable: true, intervalMinutes: 15));
+                  },
+                  child: const Text('Enable Auto SpO2 (15m)'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Disabling auto SpO2...');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.setAutoSpO2Setting(enable: false, intervalMinutes: 0));
+                  },
+                  child: const Text('Disable Auto SpO2'),
+                ),
+              ]),
               TextButton(
                 onPressed: () {
                   // Steps to Complete

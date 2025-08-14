@@ -177,6 +177,12 @@ class QCBandSDK {
         return ResolveUtil.parsePressureDataFrames(value);
       case QcBandSdkConst.cmdPressureSettingInt:
         return ResolveUtil.parsePressureSetting(value);
+      case QcBandSdkConst.cmdAutoBloodOxygenInt:
+        // Read/Write auto SpO2 setting response
+        return ResolveUtil.parseAutoBloodOxygenSetting(value);
+      case 42: // SpO2 classic history (10-byte blocks)
+        print('[SpO2 Classic] Packet received from device. Parsing 10-byte records...');
+        return ResolveUtil.parseSpO2Classic(value);
       case 120: // phone sport notify (0x78)
         final res = ResolveUtil.parseLiveSportNotify(value);
         try {
@@ -478,6 +484,10 @@ class QCBandSDK {
   static int _spDetailsTotal = 0;
   static int _spDetailsReceived = 0;
   static Map<String, dynamic>? _spDetailsMeta;
+  // SpO2 vendor trend assembly state (0xBC/0x2A)
+  static Uint8List? _spo2TrendBuf;
+  static int _spo2TrendTotal = 0;
+  static int _spo2TrendReceived = 0;
   static void Function(List<Map<String, dynamic>> summaries)? _onSpSummary;
   static void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond)? _onSpDetails;
 
@@ -543,6 +553,32 @@ class QCBandSDK {
               print('[SleepSDK] Sleep data fully received for offset=$offset. Parsing...');
               _onSleepPayloadAssembled(_sleepBuf!, offset);
               _sleepBuf = null; _sleepTotal = 0; _sleepReceived = 0;
+            }
+          }
+          return;
+        }
+        // SpO2 vendor trend (0x2A / 42)
+        if (cmd == 0x2A) {
+          // total is complete payload len; these frames can come chunked
+          // Assemble using a dedicated buffer similar to sleep/sport+
+          if (_spo2TrendTotal == 0) {
+            _spo2TrendTotal = total;
+            _spo2TrendBuf = Uint8List(_spo2TrendTotal);
+            _spo2TrendReceived = 0;
+            print('[SpO2] Vendor trend header. totalBytes=$_spo2TrendTotal');
+          }
+          if (_spo2TrendBuf != null) {
+            final int end = (_spo2TrendReceived + payload.length).clamp(0, _spo2TrendTotal);
+            _spo2TrendBuf!.setRange(_spo2TrendReceived, end, payload.sublist(0, end - _spo2TrendReceived));
+            _spo2TrendReceived = end;
+            final pct = _spo2TrendTotal > 0 ? ((_spo2TrendReceived * 100) ~/ _spo2TrendTotal) : 0;
+            print('[SpO2 Trend] Receiving vendor trend data from device... $_spo2TrendReceived/$_spo2TrendTotal bytes (${pct}%)');
+            if (_spo2TrendReceived >= _spo2TrendTotal) {
+              final res = ResolveUtil.parseSpO2VendorPayload(_spo2TrendBuf!);
+              final days = (res['data']?['days'] as List?)?.length ?? 0;
+              print('[SpO2 Trend] All data received. Parsed $days day(s) of hourly min/max arrays.');
+              try { _onSpO2Trend?.call(res); } catch (_) {}
+              _spo2TrendBuf = null; _spo2TrendTotal = 0; _spo2TrendReceived = 0;
             }
           }
           return;
@@ -654,6 +690,12 @@ class QCBandSDK {
   // Optional: set live sport listener (phone-controlled 0x78 frames)
   static void setLiveSportListener(void Function(Map<String, dynamic> live)? listener) {
     _onLiveSport = listener;
+  }
+
+  // Optional listener for SpO2 vendor trend
+  static void Function(Map<String, dynamic> trend)? _onSpO2Trend;
+  static void setSpO2TrendListener(void Function(Map<String, dynamic> trend)? listener) {
+    _onSpO2Trend = listener;
   }
 
   // Helper: feed standard characteristic notifications
@@ -1223,6 +1265,41 @@ class QCBandSDK {
     Uint8List commandPacket = ResolveUtil().addHeader(42, requestDataPayload);
 
     return Uint8List.fromList(commandPacket);
+  }
+
+  // ================= SpO2 classic helpers (16-byte commands) =================
+  // Classic: mode 0=latest, 2=continue, 0x99=delete
+  static Uint8List getSpO2HistoryLatest() {
+    final List<int> value = _generateInitValue();
+    value[0] = 42; // classic SpO2 history command id
+    value[1] = 0x00;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List getSpO2HistoryContinue() {
+    final List<int> value = _generateInitValue();
+    value[0] = 42;
+    value[1] = 0x02;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List deleteSpO2History() {
+    final List<int> value = _generateInitValue();
+    value[0] = 42;
+    value[1] = 0x99;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List getSpO2HistoryFrom(String time) {
+    final List<int> value = _generateInitValue();
+    value[0] = 42;
+    value[1] = 0x00; // start from time
+    _insertDateValue(value, time);
+    _crcValue(value);
+    return Uint8List.fromList(value);
   }
 
   static Uint8List getSleepData(int index) {
@@ -1824,6 +1901,27 @@ class QCBandSDK {
     value[1] = 2; // write
     value[2] = enable ? 1 : 2;
     value[3] = interval;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // ===== Auto SpO2 (cmd 44) =====
+  // Read auto SpO2 monitoring enable/interval
+  static Uint8List getAutoSpO2Setting() {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdAutoBloodOxygenInt; // 44
+    value[1] = 0x01; // read
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // Write auto SpO2 monitoring enable/interval (interval in minutes)
+  static Uint8List setAutoSpO2Setting({required bool enable, required int intervalMinutes}) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdAutoBloodOxygenInt; // 44
+    value[1] = 0x02; // write
+    value[2] = enable ? 0x01 : 0x00;
+    value[3] = intervalMinutes & 0xFF;
     _crcValue(value);
     return Uint8List.fromList(value);
   }

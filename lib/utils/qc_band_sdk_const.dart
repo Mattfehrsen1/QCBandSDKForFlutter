@@ -124,6 +124,8 @@ class QcBandSdkConst {
   static const String cmdTestOpen = '-55';
   static const String cmdTestClose = '-54';
   static const String cmdAutoBloodOxygen = '44';
+  // Numeric variant for auto SpO2 setting/history command id
+  static const int cmdAutoBloodOxygenInt = 44;
   static const String cmdRealTimeHeartRate = '30';
   static const String cmdPressureSetting = '54';
   static const String cmdPressure = '55';
