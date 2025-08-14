@@ -22,6 +22,7 @@ import 'package:qc_band_sdk_for_flutter/bean/models/sleepModel.dart';
 import 'package:qc_band_sdk_for_flutter/bean/models/alarm.dart';
 import 'package:qc_band_sdk_for_flutter/utils/resolve_util.dart';
 import 'sports_monitor_page.dart';
+import 'live_map_workout_page.dart';
 import 'package:qc_band_sdk_for_flutter/utils/feature_support.dart';
 import 'package:qc_band_sdk_for_flutter/utils/devicekey.dart';
 
@@ -652,6 +653,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
   int _lastParsedPacketIndex = -1;
   int _nextExpectedDataPointMinute =
       0; // Tracks the start time for the *next* expected HR data point
+  // New: simple storage for last parsed full-day HR via SDK parser
+  List<int> _lastHrArray = <int>[];
+  int? _lastHrUtc;
+  int _lastHrRange = 5;
 
   getHRData() async {
     // Reset state variables at the beginning of a new HR data retrieval session
@@ -721,6 +726,175 @@ class _DeviceScreenState extends State<DeviceScreen> {
         }
       }
     });
+  }
+
+  // New: fetch today's HR with SDK parser (cmd 21)
+  Future<void> fetchHistoryHRToday() async {
+    final int ts = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final Uint8List cmd = QCBandSDK.buildReadHeartRateCommand(ts);
+    try {
+      await _bluetoothCharacteristicWrite.write(cmd);
+      final sub = _bluetoothCharacteristicNotification.value.listen((value) {
+        if (value.isEmpty) return;
+        if (value[0] == 21) {
+          final subIdx = value.length > 1 ? value[1] : -1;
+          if (subIdx == 0 && value.length >= 4) {
+            print('HR header ← size=${value[2]} range=${value[3]}m');
+          } else {
+            print('HR frame ← sub=$subIdx len=${value.length}');
+          }
+        }
+        final parsed = QCBandSDK.ingestStandardNotification(value);
+        final type = parsed['dataType'];
+        if (type == 'HeartRateData') {
+          final end = (parsed['dataEnd'] == true) || (parsed['End'] == true);
+          final data = parsed['dicData'] ?? parsed['data'] ?? parsed['Data'];
+          if (data is Map) {
+            if (end != true) {
+              final prog = data['progress'];
+              final total = data['totalExpected'];
+              print('HR progress → filled=$prog/$total');
+            }
+            final arr = data['heartRateArray'];
+            if (arr is List && end) {
+              setState(() {
+                _lastHrArray = List<int>.from(arr);
+                _lastHrUtc = (data['utcTime'] is int) ? data['utcTime'] as int : null;
+                _lastHrRange = (data['range'] is int) ? data['range'] as int : 5;
+              });
+              final avg = _lastHrArray.isEmpty
+                  ? 0
+                  : (_lastHrArray.reduce((a, b) => a + b) ~/ _lastHrArray.length);
+              print('HR day done → samples=${_lastHrArray.length} range=${_lastHrRange}min avg=$avg');
+              // Print first few non-zero samples (up to 20)
+              final nonZero = <String>[];
+              for (int i = 0; i < _lastHrArray.length && nonZero.length < 20; i++) {
+                final v = _lastHrArray[i];
+                if (v > 0) {
+                  final totalMin = i * 5;
+                  final hh = (totalMin ~/ 60) % 24;
+                  final mm = totalMin % 60;
+                  nonZero.add('${hh.toString().padLeft(2,'0')}:${mm.toString().padLeft(2,'0')}=$v');
+                }
+              }
+              if (nonZero.isEmpty) {
+                print('HR first non-zero: none found (all zeros)');
+              } else {
+                print('HR first non-zero (up to 20): ${nonZero.join(', ')}');
+                print('HR earliest non-zero slot → ${nonZero.first}');
+              }
+            }
+          }
+        }
+      });
+      // auto-cancel listener later to avoid leaks
+      Future.delayed(const Duration(seconds: 15), () => sub.cancel());
+    } catch (e) {
+      print('fetchHistoryHRToday error: $e');
+    }
+  }
+
+  // New: fetch HR for exactly 3 days ago (local midnight) with SDK parser (cmd 21)
+  Future<void> fetchHistoryHR3DaysAgo() async {
+    // Compute local midnight three days ago
+    final DateTime now = DateTime.now();
+    final DateTime threeDaysAgoLocalMidnight =
+        DateTime(now.year, now.month, now.day).subtract(const Duration(days: 3));
+    final int ts = threeDaysAgoLocalMidnight.toUtc().millisecondsSinceEpoch ~/ 1000;
+    final Uint8List cmd = QCBandSDK.buildReadHeartRateCommand(ts);
+    try {
+      print('HR request → 3 days ago localMidnight=$threeDaysAgoLocalMidnight ts=$ts');
+      await _bluetoothCharacteristicWrite.write(cmd);
+      final sub = _bluetoothCharacteristicNotification.value.listen((value) {
+        if (value.isEmpty) return;
+        if (value[0] == 21) {
+          final subIdx = value.length > 1 ? value[1] : -1;
+          if (subIdx == 0 && value.length >= 4) {
+            print('HR header ← size=${value[2]} range=${value[3]}m (3d ago)');
+          } else {
+            print('HR frame ← sub=$subIdx len=${value.length} (3d ago)');
+          }
+        }
+        final parsed = QCBandSDK.ingestStandardNotification(value);
+        final type = parsed['dataType'];
+        if (type == 'HeartRateData') {
+          final end = (parsed['dataEnd'] == true) || (parsed['End'] == true);
+          final data = parsed['dicData'] ?? parsed['data'] ?? parsed['Data'];
+          if (data is Map) {
+            if (end != true) {
+              final prog = data['progress'];
+              final total = data['totalExpected'];
+              print('HR progress (3d ago) → filled=$prog/$total');
+            }
+            final arr = data['heartRateArray'];
+            if (arr is List && end) {
+              final List<int> arrList = List<int>.from(arr);
+              final int range = (data['range'] is int) ? data['range'] as int : 5;
+              final avg = arrList.isEmpty
+                  ? 0
+                  : (arrList.reduce((a, b) => a + b) ~/ arrList.length);
+              print('HR 3d ago done → samples=${arrList.length} range=${range}min avg=$avg');
+              // Print first few non-zero samples (up to 20)
+              final nonZero = <String>[];
+              for (int i = 0; i < arrList.length && nonZero.length < 20; i++) {
+                final v = arrList[i];
+                if (v > 0) {
+                  final totalMin = i * range;
+                  final hh = (totalMin ~/ 60) % 24;
+                  final mm = totalMin % 60;
+                  nonZero.add('${hh.toString().padLeft(2,'0')}:${mm.toString().padLeft(2,'0')}=$v');
+                }
+              }
+              if (nonZero.isEmpty) {
+                print('HR 3d ago first non-zero: none found (all zeros)');
+              } else {
+                print('HR 3d ago first non-zero (up to 20): ${nonZero.join(', ')}');
+                print('HR 3d ago earliest non-zero slot → ${nonZero.first}');
+              }
+            }
+          }
+        }
+      });
+      // auto-cancel listener later to avoid leaks
+      Future.delayed(const Duration(seconds: 15), () => sub.cancel());
+    } catch (e) {
+      print('fetchHistoryHR3DaysAgo error: $e');
+    }
+  }
+
+  // New: preferred realtime HR control using cmd 105 type=6
+  Future<void> startRealtimeHR105() async {
+    try {
+      await _bluetoothCharacteristicWrite.write(QCBandSDK.startRealtimeHeart());
+      // Ensure a single listener for realtime
+      _ensureLiveWorkoutListener();
+      // Also parse realtime HR (cmd 30) to update HR live if not in workout
+      final sub = _bluetoothCharacteristicNotification.value.listen((value) {
+        if (value.isEmpty) return;
+        final parsed = QCBandSDK.ingestStandardNotification(value);
+        if (parsed['dataType'] == 'RealtimeHeartRate') {
+          final data = parsed['dicData'] ?? parsed['data'] ?? parsed['Data'];
+          if (data is Map && data.containsKey('HeartRate')) {
+            final hr = (data['HeartRate'] ?? data['heartRate'] ?? 0) as int;
+            setState(() {
+              _liveHr = hr;
+              if (hr > 0) _hrSamples.add(hr);
+            });
+          }
+        }
+      });
+      Future.delayed(const Duration(seconds: 30), () => sub.cancel());
+    } catch (e) {
+      print('startRealtimeHR105 error: $e');
+    }
+  }
+
+  Future<void> stopRealtimeHR105() async {
+    try {
+      await _bluetoothCharacteristicWrite.write(QCBandSDK.stopRealtimeHeart());
+    } catch (e) {
+      print('stopRealtimeHR105 error: $e');
+    }
   }
 
   /// Parses a heart rate data packet and accumulates the data.
@@ -1968,6 +2142,37 @@ class _DeviceScreenState extends State<DeviceScreen> {
               buildMtuTile(context),
               ..._buildServiceTiles(context, widget.device),
               TextButton(
+                  onPressed: () async {
+                    await fetchHistoryHRToday();
+                  },
+                  child: const Text('Fetch HR Today (cmd 21)')),
+              TextButton(
+                  onPressed: () async {
+                    await fetchHistoryHR3DaysAgo();
+                  },
+                  child: const Text('Fetch HR 3 days ago (cmd 21)')),
+              if (_lastHrArray.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'HR Today: samples=${_lastHrArray.length} range=${_lastHrRange}min avg=${_lastHrArray.reduce((a,b)=>a+b) ~/ (_lastHrArray.isEmpty?1:_lastHrArray.length)}',
+                  ),
+                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => startRealtimeHR105(),
+                    child: const Text('Start Realtime HR (105)'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () => stopRealtimeHR105(),
+                    child: const Text('Stop Realtime HR (105)'),
+                  ),
+                ],
+              ),
+              TextButton(
                 onPressed: () async {
                   try {
                     final cmd = QCBandSDK.getDeviceFunctionSupport();
@@ -2076,6 +2281,24 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     ));
                   },
                   child: const Text('Open Sports Monitor'),
+                ),
+              ),
+              // Live Map GPS workout page (phone-assisted)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => LiveMapWorkoutPage(
+                        vendorNotify: _secondbluetoothCharacteristicNotification,
+                        vendorWrite: _secondbluetoothCharacteristicWrite,
+                        standardNotify: _bluetoothCharacteristicNotification,
+                        standardWrite: _bluetoothCharacteristicWrite,
+                        initialSportType: _selectedSportType,
+                      ),
+                    ));
+                  },
+                  child: const Text('Open Live Map Workout'),
                 ),
               ),
               // On-device sport and Sport+ controls

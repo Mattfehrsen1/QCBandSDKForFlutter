@@ -22,6 +22,7 @@ class QCBandSDK {
   static const int TempUnitF = 0x81;
   static const String TAG = "QCBandSDK";
   static bool isRuning = false;
+  static void Function(Map<String, dynamic> live)? _onLiveSport;
 
   static List<int> _generateValue(int size) {
     final List<int> data = List<int>.generate(size, (int index) {
@@ -162,19 +163,26 @@ class QCBandSDK {
       //   return ResolveUtil.getDeviceVersion(value);
       // case DeviceConst.CMD_Get_Name:
       //   return ResolveUtil.getDeviceName(value);
-      // case QcBandSdkConst.cmdReadHrData:
-      //   // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
-      //   return ResolveUtil.handleIncomingDataHeartData(
-      //       Uint8List.fromList(value));
+      case QcBandSdkConst.cmdReadHrData:
+        // Heart rate history multi-frame (cmd 21)
+        return ResolveUtil.handleIncomingDataHeartData(
+            Uint8List.fromList(value));
       case QcBandSdkConst.cmdHrv:
         // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
         return ResolveUtil.getHrvTestData(value);
+      case QcBandSdkConst.cmdGetRealTimeHeartRate:
+        return ResolveUtil.parseRealtimeHeart(value);
       case QcBandSdkConst.cmdPressureInt:
         return ResolveUtil.parsePressureDataFrames(value);
       case QcBandSdkConst.cmdPressureSettingInt:
         return ResolveUtil.parsePressureSetting(value);
       case 120: // phone sport notify (0x78)
-        return ResolveUtil.parseLiveSportNotify(value);
+        final res = ResolveUtil.parseLiveSportNotify(value);
+        try {
+          final data = (res['Data'] as Map?) ?? {};
+          _onLiveSport?.call(Map<String, dynamic>.from(data));
+        } catch (_) {}
+        return res;
       // case DeviceConst.CMD_Reset:
       //   return ResolveUtil.Reset();
       // case DeviceConst.CMD_Mcu_Reset:
@@ -435,6 +443,14 @@ class QCBandSDK {
   static Uint8List phoneSportPreStop(int sportType) => _buildPhoneSportCmd(6, sportType);
   static Uint8List phoneSportStop(int sportType) => _buildPhoneSportCmd(4, sportType);
 
+  // Convenience: full stop sequence (pre-stop then stop)
+  static List<Uint8List> phoneSportStopSequence(int sportType) {
+    return [
+      phoneSportPreStop(sportType),
+      phoneSportStop(sportType),
+    ];
+  }
+
   // Sport+ history
   // 0x41 summary request: payload 4-byte LE timestamp
   static Uint8List buildSportPlusSummaryReq(int unixTs) {
@@ -590,6 +606,50 @@ class QCBandSDK {
     } catch (e) {
       print('SP+ ingest error: $e');
     }
+  }
+
+  // Optional: set live sport listener (phone-controlled 0x78 frames)
+  static void setLiveSportListener(void Function(Map<String, dynamic> live)? listener) {
+    _onLiveSport = listener;
+  }
+
+  // Helper: feed standard characteristic notifications
+  static Map<String, dynamic> ingestStandardNotification(List<int> value) {
+    if (value.isEmpty) {
+      return <String, dynamic>{};
+    }
+    try {
+      return Map<String, dynamic>.from(DataParsingWithData(value));
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  // One-shot helpers that register callbacks and return request payloads.
+  // Call getSportPlusSummaryRequest first, write it, and receive summaries via the callback.
+  static Uint8List getSportPlusSummaryRequest(
+    int unixTs,
+    void Function(List<Map<String, dynamic>> summaries) onResult,
+  ) {
+    _spSummaryBuf = null;
+    _spSummaryTotal = 0;
+    _spSummaryReceived = 0;
+    _onSpSummary = onResult;
+    return buildSportPlusSummaryReq(unixTs);
+  }
+
+  // Then for a specific workout, register details callback and get the request to write.
+  static Uint8List getSportPlusDetailsRequest(
+    int sportType,
+    int startTime,
+    void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond) onResult,
+  ) {
+    _spDetailsBuf = null;
+    _spDetailsTotal = 0;
+    _spDetailsReceived = 0;
+    _spDetailsMeta = null;
+    _onSpDetails = onResult;
+    return buildSportPlusDetailsReq(sportType, startTime);
   }
 
   // Build a portable workout JSON from a Sport+ summary and details
@@ -1590,7 +1650,8 @@ class QCBandSDK {
 //   ///1 Heart rate 2 Blood oxygen 3 Temperature 4 HRV
   static Uint8List GetAutomaticHRMonitoring() {
     final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdStartHeartRateInt;
+    value[0] = QcBandSdkConst.cmdHrData; // 22
+    value[1] = 0x01; // read
     _crcValue(value);
     return Uint8List.fromList(value);
   }
@@ -1602,6 +1663,20 @@ class QCBandSDK {
     _crcValue(value);
     return Uint8List.fromList(value);
   }
+
+  // Preferred realtime HR control (cmd 105 type=6), aligned with production app
+  static Uint8List realtimeHeartControl(int action) {
+    // action: 1=start, 2=pause, 3=continue, 4=stop
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdStartHeartRateInt; // 105
+    value[1] = 6; // type=realtime heart
+    value[2] = action & 0xFF; // sub
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  static Uint8List startRealtimeHeart() => realtimeHeartControl(QcBandSdkConst.ACTION_START);
+  static Uint8List stopRealtimeHeart() => realtimeHeartControl(QcBandSdkConst.ACTION_STOP);
 
   static Uint8List SetAutomaticHRMonitoring(bool enable, int interval) {
     final List<int> value = _generateInitValue(); // likely 16 bytes

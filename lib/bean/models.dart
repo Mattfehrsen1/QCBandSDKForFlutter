@@ -12,55 +12,128 @@ int bytesToLittleEndianInt(Uint8List bytes, int offset) {
   return byteData.getInt32(0, Endian.little);
 }
 
-// Represents the parsed heart rate response for a full day
+// Represents the parsed heart rate response for a full day (aligned with app protocol)
 class ReadHeartRateResponse {
-  int? mUtcTime; // Unix timestamp for the day's heart rate data
-  List<int> mHeartRateArray = List.filled(288, 0); // Array to store all 288 heart rate values
-  int currentHrArrayFilledSize = 0; // Track filled size for progress/completion
+  int? mUtcTime; // Unix timestamp (seconds) for the day's heart rate data (adjusted for timezone like app)
+  List<int> mHeartRateArray = List.filled(288, 0); // 24h at 5-min resolution default
+  int currentHrArrayFilledSize = 0; // Progress (capped to 288)
 
-  // Method to process each incoming 16-byte data packet
-  // Returns true if the entire day's heart rate data has been received and parsed, false otherwise.
+  // Internal assembly buffer based on header size*13
+  int _rangeMinutes = 5; // sampling interval minutes from header (default 5)
+  int _packetCount = 0; // header size
+  int _writeIndex = 0; // write pointer in _rawBuffer
+  List<int> _rawBuffer = const <int>[];
+  bool _complete = false;
+
+  int get range => _rangeMinutes;
+  bool get isComplete => _complete;
+
+  // Accepts one incoming frame of cmd 21 as seen on the wire: [21, sub, ...]
+  // Returns true when transfer completes (end flag reached), false otherwise.
   bool acceptData(Uint8List data) {
-    if (data.length != 16 || data[0] != 21) {
-      print('Received invalid HR response packet: $data');
-      return false; // Not a valid HR response packet
+    if (data.isEmpty || data[0] != 21) {
+      return false;
     }
 
-    final packetIndex = data[1]; // The second byte indicates the packet sequence/type
+    final int sub = data.length > 1 ? (data[1] & 0xFF) : 0xFF;
 
-    if (packetIndex == 0) {
-      // This is the header/metadata packet [21, 0, ...]
-      print('Received HR header packet: $data');
-      return false; // Response not complete yet
-    } else if (packetIndex == 1) {
-      // This is the first data packet [21, 1, ..., 9 HR values]
-      print('Received first HR data packet: $data');
-      mUtcTime = bytesToLittleEndianInt(data, 2); // Parse timestamp
-      final hrValues = data.sublist(6, 15); // Extract 9 HR values
-      for (int i = 0; i < hrValues.length; i++) {
-        if (i < mHeartRateArray.length) {
-          mHeartRateArray[i] = hrValues[i];
-        }
-      }
-      currentHrArrayFilledSize += hrValues.length;
-    } else if (packetIndex > 1) {
-      // These are subsequent data packets [21, N, ..., 14 HR values]
-      print('Received subsequent HR data packet (index $packetIndex): $data');
-      final hrValues = data.sublist(2, 16); // Extract 14 HR values
-      // Calculate the starting index in mHeartRateArray for these values
-      final arrayStartIndex = 9 + (packetIndex - 2) * 14;
-      for (int i = 0; i < hrValues.length; i++) {
-        if (arrayStartIndex + i < mHeartRateArray.length) {
-          mHeartRateArray[arrayStartIndex + i] = hrValues[i];
-        }
-      }
-      currentHrArrayFilledSize += hrValues.length;
+    // Early termination frames: in production app, 0xFF or (today and 0x17) can signal end
+    if (sub == 0xFF) {
+      _finalizeToDailyArray();
+      _complete = true;
+      return true;
     }
 
-    // Determine if the entire response is complete.
-    // Assuming completeness when `currentHrArrayFilledSize` fills the array.
-    // In a real scenario, this might also be based on a specific `endFlag` byte
-    // or a total count from a header packet.
-    return currentHrArrayFilledSize >= mHeartRateArray.length;
+    // Header
+    if (sub == 0x00) {
+      if (data.length >= 4) {
+        _packetCount = data[2] & 0xFF;
+        _rangeMinutes = data[3] & 0xFF;
+        final int totalLen = _packetCount * 13;
+        _rawBuffer = List<int>.filled(totalLen, 0);
+        _writeIndex = 0;
+        _complete = false;
+      }
+      return false;
+    }
+
+    // First data with timestamp
+    if (sub == 0x01) {
+      if (data.length >= 6) {
+        // LE timestamp at bytes [2..5]
+        final ts = bytesToLittleEndianInt(Uint8List.sublistView(data, 2, 6), 0);
+        // Align with app: subtract local timezone to get UTC-like seconds
+        final int tzOffsetSec = DateTime.now().timeZoneOffset.inSeconds;
+        mUtcTime = ts - tzOffsetSec;
+        // Copy remaining payload starting at byte 6
+        final payload = data.sublist(6);
+        _copyIntoRaw(payload);
+      }
+      return false;
+    }
+
+    // Subsequent data
+    if (sub >= 0x02) {
+      if (data.length > 2) {
+        final payload = data.sublist(2);
+        _copyIntoRaw(payload);
+      }
+      // End when sub == size-1 (per app)
+      if (_packetCount > 0 && sub == (_packetCount - 1)) {
+        _finalizeToDailyArray();
+        _complete = true;
+        return true;
+      }
+      return false;
+    }
+
+    return false;
+  }
+
+  void _copyIntoRaw(List<int> payload) {
+    if (_rawBuffer.isEmpty || payload.isEmpty) {
+      return;
+    }
+    final int remaining = _rawBuffer.length - _writeIndex;
+    if (remaining <= 0) return;
+    final int n = payload.length < remaining ? payload.length : remaining;
+    for (int i = 0; i < n; i++) {
+      _rawBuffer[_writeIndex + i] = payload[i] & 0xFF;
+    }
+    _writeIndex += n;
+    currentHrArrayFilledSize = _writeIndex > 288 ? 288 : _writeIndex;
+  }
+
+  void _finalizeToDailyArray() {
+    // Map raw bytes into 288-length array. If sampling range != 5 min, we place
+    // samples at their nearest 5-min slots and cap array length.
+    if (_rawBuffer.isEmpty) return;
+    final int step = (_rangeMinutes <= 0) ? 5 : _rangeMinutes;
+    final int slots = 24 * 60 ~/ 5; // 288
+    final List<int> out = List<int>.filled(slots, 0);
+    int minutes = 0;
+    for (int i = 0; i < _rawBuffer.length && minutes < 24 * 60; i++) {
+      final int slot = (minutes ~/ 5);
+      if (slot >= 0 && slot < slots) {
+        out[slot] = _rawBuffer[i] & 0xFF;
+      }
+      minutes += step;
+    }
+
+    // If today, zero future samples beyond current minute as app does
+    if (mUtcTime != null) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(mUtcTime! * 1000, isUtc: true).toLocal();
+      final nowLocal = DateTime.now();
+      if (dt.year == nowLocal.year && dt.month == nowLocal.month && dt.day == nowLocal.day) {
+        final int todayMin = nowLocal.hour * 60 + nowLocal.minute;
+        final int cutoffSlot = todayMin ~/ 5;
+        for (int i = cutoffSlot + 1; i < slots; i++) {
+          out[i] = 0;
+        }
+      }
+    }
+
+    mHeartRateArray = out;
+    currentHrArrayFilledSize = _writeIndex > 288 ? 288 : _writeIndex;
   }
 }

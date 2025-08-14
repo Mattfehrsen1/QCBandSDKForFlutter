@@ -465,50 +465,55 @@ class ResolveUtil {
     final commandId = data[0];
 
     if (commandId == QcBandSdkConst.cmdReadHrData) {
-      final packetIndex = data[1];
-
-      // Using a fixed key (0) for simplicity. In a real app, if you might
-      // request HR data for different days simultaneously, this key
-      // should uniquely identify the ongoing data collection (e.g., based on a timestamp from the request).
+      // Key by logical day; we use single stream (0) unless enhanced by caller
       final int currentDayKey = 0;
+      final ReadHeartRateResponse hrResponse =
+          _ongoingHrResponses[currentDayKey] ?? ReadHeartRateResponse();
+      _ongoingHrResponses[currentDayKey] = hrResponse;
 
-      ReadHeartRateResponse hrResponse;
-      if (_ongoingHrResponses.containsKey(currentDayKey)) {
-        hrResponse = _ongoingHrResponses[currentDayKey]!;
-      } else {
-        hrResponse = ReadHeartRateResponse();
-        _ongoingHrResponses[currentDayKey] = hrResponse;
-      }
-
-      final isComplete = hrResponse.acceptData(data);
-
-      if (isComplete) {
-        _ongoingHrResponses.remove(currentDayKey); // Remove once complete
-        print('Heart rate data for the day is complete!');
+      final bool done = hrResponse.acceptData(data);
+      if (done || hrResponse.isComplete) {
+        _ongoingHrResponses.remove(currentDayKey);
         return {
           DeviceKey.DataType: 'HeartRateData',
           DeviceKey.End: true,
           DeviceKey.Data: {
             'utcTime': hrResponse.mUtcTime,
+            'range': hrResponse.range,
             'heartRateArray': hrResponse.mHeartRateArray,
             'totalValues': hrResponse.currentHrArrayFilledSize
           }
         };
-      } else {
-        // Data transfer is still ongoing
-        return {
-          DeviceKey.DataType: 'HeartRateData',
-          DeviceKey.End:
-              false, // Indicate that the response is not yet complete
-          DeviceKey.Data: {
-            'progress': hrResponse.currentHrArrayFilledSize,
-            'totalExpected': hrResponse.mHeartRateArray.length
-          }
-        };
       }
+      return {
+        DeviceKey.DataType: 'HeartRateData',
+        DeviceKey.End: false,
+        DeviceKey.Data: {
+          'progress': hrResponse.currentHrArrayFilledSize,
+          'totalExpected': hrResponse.mHeartRateArray.length
+        }
+      };
     }
     // This case should ideally not be reached if called correctly from DataParsingWithData
     return {"error ": setMethodError("Command 21")};
+  }
+
+  // Parse realtime heart response (cmd 30): first data byte is BPM
+  static Map<String, dynamic> parseRealtimeHeart(List<int> value) {
+    int hr = 0;
+    if (value.length >= 2) {
+      // Some stacks include cmd in [0], bpm at [1]; others send only payload with bpm at [0]
+      hr = value[1] & 0xFF;
+    } else if (value.isNotEmpty) {
+      hr = value[0] & 0xFF;
+    }
+    return {
+      DeviceKey.DataType: 'RealtimeHeartRate',
+      DeviceKey.End: true,
+      DeviceKey.Data: {
+        DeviceKey.heartRate: hr,
+      }
+    };
   }
 
   static Map<String, dynamic> parseAppRevisionResponse(List<int> data) {
