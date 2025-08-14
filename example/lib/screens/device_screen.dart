@@ -78,6 +78,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
   bool? _bodyTempSupported;
   int _stressDays = 1; // 1..7
   bool _stressBusy = false;
+  int _sleepDays = 1; // 1..7
+  bool _sleepBusy = false;
+  int _hrvDays = 1; // 1..7
+  bool _hrvBusy = false;
 
   Future<void> _getStressForOffset(int offset) async {
     if (_bluetoothCharacteristicWrite == null) {
@@ -172,6 +176,154 @@ class _DeviceScreenState extends State<DeviceScreen> {
       }
     } finally {
       if (mounted) setState(() => _stressBusy = false);
+    }
+  }
+
+  Future<void> _sleepRequestForOffset(int offset) async {
+    try {
+      print('[SleepUI] Requesting sleep for offset=$offset (0=today).');
+      await _secondbluetoothCharacteristicWrite
+          .write(QCBandSDK.getSleepDetailForOffset(offset));
+    } catch (_) {
+      await _bluetoothCharacteristicWrite
+          .write(QCBandSDK.getSleepDetailForOffset(offset));
+    }
+
+    final subV = _secondbluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isEmpty) return;
+      if (value[0] == 0xBC) {
+        final cmd = value.length > 1 ? value[1] : -1;
+        final total = value.length > 3 ? ((value[2] & 0xFF) | ((value[3] & 0xFF) << 8)) : -1;
+        final chunk = value.length >= 6 ? (value.length - 6) : value.length;
+        print('[SleepUI] Vendor frame: cmd=0x${cmd.toRadixString(16)}, expectedTotalBytes=$total, chunkBytes=$chunk');
+        QCBandSDK.ingestVendorNotification(value);
+      } else if (_sleepBusy) {
+        QCBandSDK.ingestVendorNotification(value);
+      }
+    });
+    final subS = _bluetoothCharacteristicNotification.value.listen((value) {
+      if (value.isEmpty) return;
+      if (value[0] == 0xBC || _sleepBusy) {
+        final cmd = value.length > 1 ? value[1] : -1;
+        print('[SleepUI] Standard notify carrying vendor bytes. len=${value.length}, cmd=0x${cmd.toRadixString(16)}');
+        QCBandSDK.ingestVendorNotification(value);
+      }
+    });
+
+    QCBandSDK.setSleepListener((m) {
+      try {
+        final data = m['data'] as Map? ?? {};
+        final date = data['date'];
+        final totals = data['totals'] as Map? ?? {};
+        final segLen = (data['segments'] as List?)?.length ?? 0;
+        print('[SleepUI] Done $date → segments=$segLen, deep=${totals['deep']}, light=${totals['light']}, rem=${totals['rem']}, awake=${totals['awake']}');
+      } catch (_) {}
+    });
+
+    await Future.any([
+      Future.delayed(const Duration(seconds: 9)),
+    ]);
+
+    await subV.cancel();
+    await subS.cancel();
+  }
+
+  Future<void> _hrvRequestForOffset(int offset) async {
+    if (_bluetoothCharacteristicWrite == null) {
+      print('[HRV][UI] Cannot start: write characteristic not ready');
+      return;
+    }
+    print('[HRV][UI] Starting request for day offset=$offset (0=today)');
+    final cmd = QCBandSDK.getHrvByOffset(offset);
+    int expectedTotal = 0;
+    int progress = 0;
+    Map<String, dynamic>? finalMap;
+    final completer = Completer<void>();
+    Timer? timeout;
+    late StreamSubscription<List<int>> subStd;
+    subStd = _bluetoothCharacteristicNotification.value.listen((value) {
+      try {
+        final parsed = QCBandSDK.ingestStandardNotification(value);
+        if (parsed['dataType'] == 'HRVData') {
+          final bool isEnd = parsed['end'] == true;
+          final data = parsed['data'] as Map?;
+          if (!isEnd) {
+            progress = (data?['progress'] ?? 0) as int;
+            expectedTotal = (data?['totalExpected'] ?? 0) as int;
+            print('[HRV][UI] Receiving… $progress/$expectedTotal raw bytes');
+          } else {
+            finalMap = Map<String, dynamic>.from(parsed);
+            try { timeout?.cancel(); } catch (_) {}
+            subStd.cancel();
+            completer.complete();
+          }
+        }
+      } catch (e) {
+        print('[HRV][UI] Parse error: $e');
+      }
+    });
+    try {
+      await _bluetoothCharacteristicWrite.write(cmd);
+    } catch (e) {
+      print('[HRV][UI] Write error: $e');
+      await subStd.cancel();
+      return;
+    }
+    timeout = Timer(const Duration(seconds: 8), () {
+      if (!completer.isCompleted) {
+        print('[HRV][UI] Timeout waiting for device response (offset=$offset)');
+        subStd.cancel();
+        completer.complete();
+      }
+    });
+    await completer.future;
+    if (finalMap != null) {
+      final data = finalMap!['data'] as Map;
+      final String date = data['date'] as String? ?? '';
+      final int range = (data['range'] ?? 0) as int;
+      final List hrvArray = (data['hrvArray'] as List?) ?? const [];
+      final int nonZero = hrvArray.where((e) => (e is int) && e != 0).length;
+      int lastSlot = -1;
+      for (int i = hrvArray.length - 1; i >= 0; i--) {
+        final v = hrvArray[i];
+        if (v is int && v != 0) { lastSlot = i; break; }
+      }
+      String lastSlotStr = 'n/a';
+      if (lastSlot >= 0) {
+        final minutes = lastSlot * 5;
+        final hh = (minutes ~/ 60).toString().padLeft(2, '0');
+        final mm = (minutes % 60).toString().padLeft(2, '0');
+        lastSlotStr = '$hh:$mm';
+      }
+      final int totalBytes = (data['totalValues'] ?? 0) as int;
+      print('[HRV][UI] Summary: date=$date, points=288, nonZero=$nonZero, lastFilledSlot=$lastSlot ($lastSlotStr), range=${range}min, bytes=$totalBytes');
+      Snackbar.show(ABC.c, 'HRV $date: 288 pts (nz=$nonZero), range ${range}m', success: true);
+    }
+  }
+
+  Future<void> _getHrvNDays(int days) async {
+    if (_hrvBusy) return;
+    setState(() => _hrvBusy = true);
+    try {
+      for (int offset = 0; offset < days; offset++) {
+        await _hrvRequestForOffset(offset);
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+    } finally {
+      if (mounted) setState(() => _hrvBusy = false);
+    }
+  }
+
+  Future<void> _getSleepNDays(int days) async {
+    if (_sleepBusy) return;
+    setState(() => _sleepBusy = true);
+    try {
+      for (int offset = 0; offset < days; offset++) {
+        await _sleepRequestForOffset(offset);
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+    } finally {
+      if (mounted) setState(() => _sleepBusy = false);
     }
   }
 
@@ -2232,6 +2384,58 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     ElevatedButton(
                       onPressed: _stressBusy ? null : () => _getStressNDays(_stressDays),
                       child: Text(_stressBusy ? 'Fetching…' : 'Get Stress ($_stressDays d)')),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                child: Row(
+                  children: [
+                    const Text('HRV days:'),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: _hrvDays,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1')),
+                        DropdownMenuItem(value: 2, child: Text('2')),
+                        DropdownMenuItem(value: 3, child: Text('3')),
+                        DropdownMenuItem(value: 4, child: Text('4')),
+                        DropdownMenuItem(value: 5, child: Text('5')),
+                        DropdownMenuItem(value: 6, child: Text('6')),
+                        DropdownMenuItem(value: 7, child: Text('7')),
+                      ],
+                      onChanged: (v) => setState(() => _hrvDays = v ?? 1),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                        onPressed: _hrvBusy ? null : () => _getHrvNDays(_hrvDays),
+                        child: Text(_hrvBusy ? 'Fetching…' : 'Get HRV (${_hrvDays} d)')),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                child: Row(
+                  children: [
+                    const Text('Sleep days:'),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: _sleepDays,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1')),
+                        DropdownMenuItem(value: 2, child: Text('2')),
+                        DropdownMenuItem(value: 3, child: Text('3')),
+                        DropdownMenuItem(value: 4, child: Text('4')),
+                        DropdownMenuItem(value: 5, child: Text('5')),
+                        DropdownMenuItem(value: 6, child: Text('6')),
+                        DropdownMenuItem(value: 7, child: Text('7')),
+                      ],
+                      onChanged: (v) => setState(() => _sleepDays = v ?? 1),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: _sleepBusy ? null : () => _getSleepNDays(_sleepDays),
+                      child: Text(_sleepBusy ? 'Fetching…' : 'Get Sleep ($_sleepDays d)')),
                   ],
                 ),
               ),

@@ -14,6 +14,14 @@ class ResolveUtil {
   // Static map to hold ongoing heart rate responses across multiple calls
   static final Map<int, ReadHeartRateResponse> _ongoingHrResponses = {};
 
+  // ================= HRV (cmd 57) multi-frame state =================
+  static List<int>? _hrvRawBuffer; // holds concatenated raw HRV bytes
+  static int _hrvWriteIndex = 0; // number of bytes written into buffer
+  static int _hrvExpectedFrames = 0; // header 'size'
+  static int _hrvRangeMin = 0; // header 'range'
+  static int _hrvOffsetDays = 0; // first data frame offset days
+  static Set<int> _hrvProcessedSubs = <int>{}; // deduplicate frame indices
+
   ///crc校验
   static void crcValue(List<int> value) {
     int crc = 0;
@@ -496,6 +504,183 @@ class ResolveUtil {
     }
     // This case should ideally not be reached if called correctly from DataParsingWithData
     return {"error ": setMethodError("Command 21")};
+  }
+
+  /// Assemble HRV history frames (cmd 57) and emit progress/final payload
+  /// Follows classic layout:
+  ///  - sub=0x00: header [size, rangeMin]
+  ///  - sub=0x01: first data with [offsetDays, payload...]
+  ///  - sub=0x02..: subsequent frames with [payload...]
+  ///  - sub=0xFF or sub==size-1: end
+  static Map<String, dynamic> handleIncomingDataHrv(Uint8List data) {
+    final Map<String, dynamic> progress = {
+      'dataType': 'HRVData',
+      'end': false,
+      'data': <String, dynamic>{},
+    };
+
+    if (data.isEmpty || data[0] != QcBandSdkConst.cmdHrv) {
+      return progress;
+    }
+
+    final int sub = (data.length >= 2 ? (data[1] & 0xFF) : 0);
+
+    // Header
+    if (sub == 0x00) {
+      // Guard: if header already processed, ignore repeat headers
+      if (_hrvProcessedSubs.contains(0x00) && _hrvRawBuffer != null) {
+        print('[HRV] Duplicate header received → ignoring');
+        progress['data'] = {
+          'progress': _hrvWriteIndex,
+          'totalExpected': _hrvRawBuffer?.length ?? 0,
+        };
+        return progress;
+      }
+      final int size = data.length > 2 ? (data[2] & 0xFF) : 0;
+      final int rangeMin = data.length > 3 ? (data[3] & 0xFF) : 0;
+      _hrvExpectedFrames = size;
+      _hrvRangeMin = rangeMin;
+      _hrvOffsetDays = 0;
+      final int bufLen = (size > 0 ? size * 13 : 0);
+      _hrvRawBuffer = bufLen > 0 ? List<int>.filled(bufLen, 0) : <int>[];
+      _hrvWriteIndex = 0;
+      _hrvProcessedSubs = <int>{0}; // mark header seen
+      print('[HRV] Header received → frames=$size, range=$rangeMin min/sample, bufferBytes=$bufLen');
+      progress['data'] = {
+        'progress': 0,
+        'totalExpected': _hrvRawBuffer?.length ?? 0,
+      };
+      return progress;
+    }
+
+    // Determine payload boundaries (strip trailing CRC when present)
+    int payloadEnd = data.length;
+    if (payloadEnd > 0) {
+      payloadEnd = payloadEnd - 1; // most classic frames use last byte as CRC
+      if (payloadEnd < 0) payloadEnd = 0;
+    }
+
+    if (sub == 0x01) {
+      if (_hrvProcessedSubs.contains(0x01)) {
+        print('[HRV] Duplicate first data frame detected → skipping (offsetDays may repeat)');
+        progress['data'] = {
+          'progress': _hrvWriteIndex,
+          'totalExpected': _hrvRawBuffer?.length ?? 0,
+        };
+        return progress;
+      }
+      // First data: includes offsetDays at [2]
+      _hrvOffsetDays = data.length > 2 ? (data[2] & 0xFF) : 0;
+      final int payloadStart = 3;
+      if (_hrvRawBuffer != null && payloadEnd > payloadStart && _hrvWriteIndex < _hrvRawBuffer!.length) {
+        final int remaining = _hrvRawBuffer!.length - _hrvWriteIndex;
+        final int toCopy = (payloadEnd - payloadStart).clamp(0, remaining);
+        if (toCopy > 0) {
+          _hrvRawBuffer!.setRange(
+              _hrvWriteIndex, _hrvWriteIndex + toCopy, data.sublist(payloadStart, payloadStart + toCopy));
+          _hrvWriteIndex += toCopy;
+        }
+        print('[HRV] First data frame → offsetDays=$_hrvOffsetDays, copied=$toCopy bytes, written=$_hrvWriteIndex/${_hrvRawBuffer?.length ?? 0}');
+        _hrvProcessedSubs.add(0x01);
+      }
+    } else if (sub == 0xFF || sub == 0x00) {
+      // Already handled header; 0xFF considered below as end
+    } else {
+      // Subsequent frames: payload starts at [2]
+      if (_hrvProcessedSubs.contains(sub)) {
+        print('[HRV] Duplicate frame #$sub detected → skipping');
+        progress['data'] = {
+          'progress': _hrvWriteIndex,
+          'totalExpected': _hrvRawBuffer?.length ?? 0,
+        };
+        return progress;
+      }
+      final int payloadStart = 2;
+      if (_hrvRawBuffer != null && payloadEnd > payloadStart && _hrvWriteIndex < _hrvRawBuffer!.length) {
+        final int remaining = _hrvRawBuffer!.length - _hrvWriteIndex;
+        final int toCopy = (payloadEnd - payloadStart).clamp(0, remaining);
+        if (toCopy > 0) {
+          _hrvRawBuffer!.setRange(
+              _hrvWriteIndex, _hrvWriteIndex + toCopy, data.sublist(payloadStart, payloadStart + toCopy));
+          _hrvWriteIndex += toCopy;
+        }
+        print('[HRV] Frame #$sub → copied=$toCopy bytes, written=$_hrvWriteIndex/${_hrvRawBuffer?.length ?? 0}');
+        _hrvProcessedSubs.add(sub);
+      }
+    }
+
+    // End detection
+    final bool reachedLastIndex = (_hrvExpectedFrames > 0 && sub == (_hrvExpectedFrames - 1));
+    final bool explicitEnd = (sub == 0xFF);
+    if (explicitEnd || reachedLastIndex) {
+      // Finalize: normalize to 5-minute grid (288 points)
+      print('[HRV] End of stream via ${explicitEnd ? '0xFF end flag' : 'last index'}; totalRawBytes=$_hrvWriteIndex, range=$_hrvRangeMin');
+      final List<int> raw = (_hrvRawBuffer ?? <int>[]);
+      final int range = (_hrvRangeMin > 0 ? _hrvRangeMin : 30);
+      // Use only the bytes actually written to avoid filling future with carry-forward
+      final int rawSamples = _hrvWriteIndex.clamp(0, raw.length);
+      final List<int> hrvArray288 = List<int>.filled(288, 0);
+      int maxSlotFilled = -1;
+      if (range > 0) {
+        for (int i = 0; i < rawSamples; i++) {
+          final int slot = ((i * range) / 5).floor();
+          if (slot >= 0 && slot < 288) {
+            hrvArray288[slot] = raw[i] & 0xFF;
+            if (slot > maxSlotFilled) maxSlotFilled = slot;
+          }
+        }
+      }
+      // Carry-forward within observed slots only
+      int last = 0;
+      for (int i = 0; i <= maxSlotFilled && i < 288; i++) {
+        if (hrvArray288[i] != 0) {
+          last = hrvArray288[i];
+        } else if (last != 0) {
+          hrvArray288[i] = last;
+        }
+      }
+
+      final DateTime date = DateTime.now().subtract(Duration(days: _hrvOffsetDays));
+      final String dateStr =
+          '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final int nonZero = hrvArray288.where((v) => v != 0).length;
+      String lastSlotStr = 'n/a';
+      if (maxSlotFilled >= 0) {
+        final int minutes = (maxSlotFilled * 5);
+        final int hh = minutes ~/ 60;
+        final int mm = minutes % 60;
+        lastSlotStr = '${hh.toString().padLeft(2,'0')}:${mm.toString().padLeft(2,'0')}';
+      }
+      print('[HRV] Normalized for $dateStr → 288pts, nonZero=$nonZero, lastFilledSlot=$maxSlotFilled ($lastSlotStr)');
+
+      // Build final map
+      final Map<String, dynamic> done = {
+        'dataType': 'HRVData',
+        'end': true,
+        'data': {
+          'date': dateStr,
+          'range': range,
+          'hrvArray': hrvArray288,
+          'totalValues': _hrvWriteIndex,
+        }
+      };
+
+      // Reset state after completion
+      _hrvRawBuffer = null;
+      _hrvWriteIndex = 0;
+      _hrvExpectedFrames = 0;
+      _hrvRangeMin = 0;
+      _hrvOffsetDays = 0;
+      _hrvProcessedSubs = <int>{};
+      return done;
+    }
+
+    // Progress update
+    progress['data'] = {
+      'progress': _hrvWriteIndex,
+      'totalExpected': _hrvRawBuffer?.length ?? 0,
+    };
+    return progress;
   }
 
   // Parse realtime heart response (cmd 30): first data byte is BPM

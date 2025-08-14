@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'utils/qc_band_sdk_const.dart';
 import 'utils/resolve_util.dart';
 import 'bean/models/alarm.dart';
+import 'bean/models/sleepModel.dart';
 
 class QCBandSDK {
   static const int DATAREADSTART = 0;
@@ -168,8 +169,8 @@ class QCBandSDK {
         return ResolveUtil.handleIncomingDataHeartData(
             Uint8List.fromList(value));
       case QcBandSdkConst.cmdHrv:
-        // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
-        return ResolveUtil.getHrvTestData(value);
+        // HRV history multi-frame (cmd 57)
+        return ResolveUtil.handleIncomingDataHrv(Uint8List.fromList(value));
       case QcBandSdkConst.cmdGetRealTimeHeartRate:
         return ResolveUtil.parseRealtimeHeart(value);
       case QcBandSdkConst.cmdPressureInt:
@@ -511,13 +512,41 @@ class QCBandSDK {
     if (value.isEmpty) return;
     try {
       // Ignore non-0xBC frames unless we're in the middle of assembling
-      if (value[0] != 0xBC && _spSummaryTotal == 0 && _spDetailsTotal == 0) {
+      if (value[0] != 0xBC && _spSummaryTotal == 0 && _spDetailsTotal == 0 && _sleepTotal == 0) {
         return;
       }
       if (value.length >= 6 && value[0] == 0xBC) {
         final int cmd = value[1] & 0xFF;
         final int total = (value[2] & 0xFF) | ((value[3] & 0xFF) << 8);
         final Uint8List payload = Uint8List.fromList(value.sublist(6));
+        print('[SleepSDK] Vendor frame received (0xBC). Command=0x${cmd.toRadixString(16)}, expectedTotalBytes=$total, chunkBytes=${payload.length}');
+        if (cmd == 0x02) {
+          // Some firmwares ACK with 0x02 before streaming data
+          print('[SleepSDK] ACK received from device. Waiting for sleep data...');
+        }
+        // Sleep details (0x39 or 0x27)
+        if (cmd == 0x39 || cmd == 0x27) {
+          if (_sleepTotal == 0) {
+            _sleepTotal = total;
+            _sleepBuf = Uint8List(_sleepTotal);
+            _sleepReceived = 0;
+            print('[SleepSDK] Sleep data header. totalBytes=$_sleepTotal, forOffset=${_sleepRequestedOffset ?? -1} (0=today)');
+          }
+          if (_sleepBuf != null) {
+            final int end = (_sleepReceived + payload.length).clamp(0, _sleepTotal);
+            _sleepBuf!.setRange(_sleepReceived, end, payload.sublist(0, end - _sleepReceived));
+            _sleepReceived = end;
+            final pct = _sleepTotal > 0 ? ((_sleepReceived * 100) ~/ _sleepTotal) : 0;
+            print('[SleepSDK] Receiving sleep data... $_sleepReceived/$_sleepTotal bytes (${pct}%)');
+            if (_sleepReceived >= _sleepTotal) {
+              final offset = _sleepRequestedOffset ?? 0;
+              print('[SleepSDK] Sleep data fully received for offset=$offset. Parsing...');
+              _onSleepPayloadAssembled(_sleepBuf!, offset);
+              _sleepBuf = null; _sleepTotal = 0; _sleepReceived = 0;
+            }
+          }
+          return;
+        }
         if (cmd == 0x42) {
           if (_spSummaryTotal == 0) {
             _spSummaryTotal = total;
@@ -572,6 +601,20 @@ class QCBandSDK {
       } else {
         // Continuation chunk without header (summary or details)
         final Uint8List payload = Uint8List.fromList(value);
+        if (_sleepTotal > 0 && _sleepBuf != null) {
+          final int end = (_sleepReceived + payload.length).clamp(0, _sleepTotal);
+          _sleepBuf!.setRange(_sleepReceived, end, payload.sublist(0, end - _sleepReceived));
+          _sleepReceived = end;
+          final pct = _sleepTotal > 0 ? ((_sleepReceived * 100) ~/ _sleepTotal) : 0;
+          print('[SleepSDK] Receiving sleep data... $_sleepReceived/$_sleepTotal bytes (${pct}%)');
+          if (_sleepReceived >= _sleepTotal) {
+            final offset = _sleepRequestedOffset ?? 0;
+            print('[SleepSDK] Sleep data fully received for offset=$offset. Parsing...');
+            _onSleepPayloadAssembled(_sleepBuf!, offset);
+            _sleepBuf = null; _sleepTotal = 0; _sleepReceived = 0;
+          }
+          return;
+        }
         if (_spSummaryTotal > 0 && _spSummaryBuf != null) {
           final int end = (_spSummaryReceived + payload.length).clamp(0, _spSummaryTotal);
           _spSummaryBuf!.setRange(_spSummaryReceived, end, payload.sublist(0, end - _spSummaryReceived));
@@ -1047,6 +1090,90 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
+  // ===== Sleep (details by day offset via vendor 0x39) =====
+  static Uint8List? _sleepBuf;
+  static int _sleepTotal = 0;
+  static int _sleepReceived = 0;
+  static int? _sleepRequestedOffset;
+  static void Function(Map<String, dynamic> sleep)? _onSleep;
+
+  static void setSleepListener(void Function(Map<String, dynamic> sleep)? listener) {
+    _onSleep = listener;
+  }
+
+  static Uint8List getSleepDetailForOffset(int offset) {
+    // Validate and clamp 0..29
+    int clamped = offset;
+    if (clamped < 0) clamped = 0;
+    if (clamped > 29) clamped = 29;
+    _sleepRequestedOffset = clamped;
+    // Use 0..0 range for full-day request (device interprets as all segments)
+    final req = generateReadSleepDetailsCommand(clamped, 0, 0);
+    print('[SleepSDK] Requesting sleep for offset=$clamped (0=today). Sending vendor cmd 0x27...');
+    return req;
+  }
+
+  static void _onSleepPayloadAssembled(Uint8List payload, int offset) {
+    try {
+      // Reconstruct full frame with header for parser: [0xBC,0x27,lenLo,lenHi,0,0] + payload
+      final int len = payload.length;
+      final Uint8List full = Uint8List(len + 6);
+      full[0] = 0xBC;
+      full[1] = 0x27;
+      full[2] = len & 0xFF;
+      full[3] = (len >> 8) & 0xFF;
+      full[4] = 0x00;
+      full[5] = 0x00;
+      full.setRange(6, 6 + len, payload);
+
+      final parser = SleepParser(full, currentIndex: offset);
+      final summary = parser.getSleepSummaryWithTimestamps();
+      final bedTime = summary.bedTime;
+      final wakeTime = summary.wakeTime;
+      final durations = summary.durations;
+      final segments = summary.segments;
+
+      // Build normalized map
+      final DateTime dateBase = bedTime ?? DateTime.now().toUtc().subtract(Duration(days: offset));
+      final String dateStr = '${dateBase.year.toString().padLeft(4,'0')}-${dateBase.month.toString().padLeft(2,'0')}-${dateBase.day.toString().padLeft(2,'0')}';
+      final Map<String, dynamic> result = {
+        'dataType': 'SleepDetail',
+        'end': true,
+        'data': {
+          'date': dateStr,
+          'bedTime': bedTime?.toIso8601String(),
+          'wakeTime': wakeTime?.toIso8601String(),
+          'totals': {
+            'deep': durations['deepSleep'] ?? 0,
+            'light': durations['lightSleep'] ?? 0,
+            'rem': durations['rapidEyeMovement'] ?? 0,
+            'awake': durations['awake'] ?? 0,
+          },
+          'segments': segments.map((s) => {
+            'start': s.segmentStart.toIso8601String(),
+            'end': s.segmentEnd.toIso8601String(),
+            'stage': s.stageType,
+          }).toList(),
+        }
+      };
+
+      final int nSeg = segments.length;
+      final int deep = durations['deepSleep'] ?? 0;
+      final int light = durations['lightSleep'] ?? 0;
+      final int rem = durations['rapidEyeMovement'] ?? 0;
+      final int awake = durations['awake'] ?? 0;
+      print('[SleepSDK] Parsed sleep for $dateStr → segments=$nSeg, deep=$deep, light=$light, rem=$rem, awake=$awake');
+      if (segments.isNotEmpty) {
+        final preview = segments.take(3).map((s)=>'${s.segmentStart.toIso8601String()} to ${s.segmentEnd.toIso8601String()} (stage ${s.stageType})').join('; ');
+        print('[SleepSDK] First segments: $preview');
+      }
+
+      try { _onSleep?.call(result); } catch (_) {}
+    } catch (e) {
+      print('Sleep parse error: $e');
+    }
+  }
+
   // Request device function support (cmd 0x3C = 60)
   static Uint8List getDeviceFunctionSupport() {
     final List<int> value = _generateInitValue();
@@ -1314,6 +1441,19 @@ class QCBandSDK {
     value[1] = offset;
 
     _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // Helper: HRV request by day offset (0=today..6)
+  static Uint8List getHrvByOffset(int offset) {
+    int clamped = offset;
+    if (clamped < 0) clamped = 0;
+    if (clamped > 6) clamped = 6;
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdHrv;
+    value[1] = clamped & 0xFF;
+    _crcValue(value);
+    print('[HRV] Requesting history: offsetDays=$clamped (0=today), cmd=57');
     return Uint8List.fromList(value);
   }
 

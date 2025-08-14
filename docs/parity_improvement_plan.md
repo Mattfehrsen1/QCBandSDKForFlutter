@@ -8,6 +8,13 @@ This plan describes how to bring HRV, SpO2, Sleep, and related areas up to the s
 - Emit a single, normalized data shape per domain (clear `dataType`, `end`, `data` keys).
 - Unit‑test parser logic with recorded frames; verify progress/end markers and edge cases.
 
+### Current status
+- Heart‑rate history and realtime HR are fixed and aligned with the decompiled app.
+- Stress (pressure) is implemented and documented.
+- Sleep parser is complete, but ingestion wiring is missing.
+- HRV, SpO2, BP, Temperature history still need proper multi‑frame flows.
+- Handshake/init sequence is not centralized yet.
+
 ### Files to touch (high‑level)
 - `lib/qc_band_sdk_for_flutter.dart`: request builders, public helpers.
 - `lib/utils/resolve_util.dart`: parsers, assemblers, routing.
@@ -186,9 +193,29 @@ This plan describes how to bring HRV, SpO2, Sleep, and related areas up to the s
 ---
 
 ## Rollout
-1. Ship stress refinements (low risk).
-2. Wire sleep ingestion to existing parser (medium risk).
-3. Implement HRV assembler and replace demo logic (medium risk).
-4. Implement SpO2 classic flows and parser; integrate (medium risk).
-5. Add BP/Temp and support flags parsing (optional/low priority).
+1. Sleep ingestion wiring (low risk; parser ready). [In progress]
+2. HRV assembler (medium risk; mirrors HR/stress).
+3. SpO2 classic flows + parser (medium risk).
+4. Stress refinements (low risk, optional polish).
+5. BP/Temp and support flags parsing (optional, as needed).
+
+---
+
+## Handshake/init sequence (where it lives and what to do)
+
+Should it live in the SDK or app?
+- Place the orchestration in the app (UI layer/controller) because it depends on UI state, permissions, and timing. Expose stateless request/parse helpers in the SDK.
+
+What the app should do on connect (simple order):
+1. Request MTU (e.g., 223) and enable notify on standard + vendor characteristics.
+2. Set time with language (SDK helper `setDeviceTime(offsetSeconds)`), then wait for a short acknowledgment window.
+3. Read battery (cmd 9) and optionally device version/info.
+4. Read function‑support flags (cmd 60) and cache them.
+5. Initialize auto‑measure switches: read cmd 22 settings for HR, SpO2, Temp, HRV; decide whether to change them (user preference) and write if needed.
+6. Kick off the main sync flows gated by support flags (steps → sleep → HRV → heart → SpO2 → temp → etc.).
+
+Notes:
+- Implement a simple throttle (do not run the sequence more than once per X minutes).
+- Use single‑flight queueing and timeouts; cancel/cleanup on disconnect.
+- SDK already provides many request builders and parsers; keep handshake logic in app for clarity and flexibility.
 
