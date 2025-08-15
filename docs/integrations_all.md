@@ -15,6 +15,7 @@ This document consolidates the integration notes from all domain docs (sleep, HR
 - Alarms (set/get)
 - Sport: on-device and phone-controlled; Sport+ history
 - Common error handling and logging
+ - Auto monitor settings (HR: 22, SpO2: 44, HRV: 56, Stress: 54)
 
 ---
 
@@ -179,6 +180,25 @@ QCBandSDK.getStressSetting();                  // read auto setting
 QCBandSDK.setStressSetting(enable: true/false);
 // Parsers: ResolveUtil.parsePressureDataFrames, ResolveUtil.parsePressureSetting
 ```
+
+---
+
+### Auto monitor settings (handshake family)
+All auto-monitoring toggles follow the same 16-byte request with a mode byte:
+- Read: mode 0x01
+- Write: mode 0x02 with enable (0/1), plus interval where applicable
+
+Commands:
+- HR auto (cmd 22): `GetAutomaticHRMonitoring()` (read), `SetAutomaticHRMonitoring(enable, interval)` (write)
+- SpO2 auto (cmd 44): `getAutoSpO2Setting()` (read), `setAutoSpO2Setting(enable, intervalMinutes)` (write)
+- HRV auto (cmd 56): `getAutoHrvSetting()` (read), `setAutoHrvSetting(enable)` (write)
+- Stress auto (cmd 54): `getStressSetting()` (read), `setStressSetting(enable)` (write)
+
+Routing and parsers:
+- HR (22): parsed by `ResolveUtil.getAutoHeart`
+- SpO2 (44): `ResolveUtil.parseAutoBloodOxygenSetting`
+- HRV (56): `ResolveUtil.parseAutoHrvSetting`
+- Stress (54): `ResolveUtil.parsePressureSetting`
 
 ---
 

@@ -130,6 +130,7 @@ class QcBandSdkConst {
   static const String cmdPressureSetting = '54';
   static const String cmdPressure = '55';
   static const String cmdHrvEnable = '56';
+  static const int cmdHrvEnableInt = 56;
   // Numeric variants for switch/parse routing
   static const int cmdPressureInt = 55;
   static const int cmdPressureSettingInt = 54;

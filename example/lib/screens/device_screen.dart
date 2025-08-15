@@ -2666,6 +2666,58 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   child: const Text('Disable Auto SpO2'),
                 ),
               ]),
+              const SizedBox(height: 8),
+              Row(children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Reading auto HR setting...');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.GetAutomaticHRMonitoring());
+                  },
+                  child: const Text('Read Auto HR'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Enabling auto HR (interval=10)');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.SetAutomaticHRMonitoring(true, 10));
+                  },
+                  child: const Text('Enable Auto HR'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Disabling auto HR');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.SetAutomaticHRMonitoring(false, 0));
+                  },
+                  child: const Text('Disable Auto HR'),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              Row(children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Reading auto HRV setting...');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.getAutoHrvSetting());
+                  },
+                  child: const Text('Read Auto HRV'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Enabling auto HRV');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.setAutoHrvSetting(true));
+                  },
+                  child: const Text('Enable Auto HRV'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    print('[UI] Disabling auto HRV');
+                    await _bluetoothCharacteristicWrite.write(QCBandSDK.setAutoHrvSetting(false));
+                  },
+                  child: const Text('Disable Auto HRV'),
+                ),
+              ]),
               TextButton(
                 onPressed: () {
                   // Steps to Complete

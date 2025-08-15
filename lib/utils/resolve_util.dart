@@ -1348,6 +1348,24 @@ class ResolveUtil {
     return result;
   }
 
+  // Parse auto HRV setting (cmd 56): [cmd, mode, enable]
+  static Map<String, dynamic> parseAutoHrvSetting(List<int> value) {
+    final Map<String, dynamic> result = {
+      DeviceKey.DataType: QcBandSdkConst.cmdHrvEnable,
+      DeviceKey.End: true,
+    };
+    if (value.length >= 3) {
+      final int mode = value[1] & 0xFF;
+      final bool enabled = (value[2] & 0xFF) == 0x01;
+      result[DeviceKey.Data] = {
+        'enabled': enabled,
+        'mode': mode,
+      };
+      print('[Auto HRV] Setting response → enabled=$enabled');
+    }
+    return result;
+  }
+
 //   ///闹钟数据
 //   static Map getClockData(List<int> value) {
 //     Map maps = {

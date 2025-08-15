@@ -138,7 +138,7 @@ class QCBandSDK {
       //   return ResolveUtil.getActivityExerciseData(value);
       // case DeviceConst.CMD_SET_TIME:
       //   return ResolveUtil.setTimeSuccessful(value);
-      // case DeviceConst.CMD_Get_SPORTData:
+      // case DeviceConst.CMD_GET_SPORTData:
       //   return ResolveUtil.getExerciseData(value);
       // case DeviceConst.CMD_GET_TIME:
       //   return ResolveUtil.getDeviceTime(value);
@@ -180,6 +180,12 @@ class QCBandSDK {
       case QcBandSdkConst.cmdAutoBloodOxygenInt:
         // Read/Write auto SpO2 setting response
         return ResolveUtil.parseAutoBloodOxygenSetting(value);
+      case QcBandSdkConst.cmdHrData:
+        // Auto HR (cmd 22) read/write response
+        return ResolveUtil.getAutoHeart(value);
+      case QcBandSdkConst.cmdHrvEnableInt:
+        // Auto HRV (cmd 56) read/write response
+        return ResolveUtil.parseAutoHrvSetting(value);
       case 42: // SpO2 classic history (10-byte blocks)
         print('[SpO2 Classic] Packet received from device. Parsing 10-byte records...');
         return ResolveUtil.parseSpO2Classic(value);
@@ -2169,7 +2175,25 @@ class QCBandSDK {
 //     _crcValue(value);
 //     return Uint8List.fromList(value);
 //   }
-// }
+
+  // Read auto HRV setting (enable/disable)
+  static Uint8List getAutoHrvSetting() {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdHrvEnableInt; // 56
+    value[1] = 0x01; // read
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
+
+  // Write auto HRV setting
+  static Uint8List setAutoHrvSetting(bool enable) {
+    final List<int> value = _generateInitValue();
+    value[0] = QcBandSdkConst.cmdHrvEnableInt; // 56
+    value[1] = 0x02; // write
+    value[2] = enable ? 0x01 : 0x00;
+    _crcValue(value);
+    return Uint8List.fromList(value);
+  }
 }
 
 Uint8List intToLittleEndian4Bytes(int value) {
