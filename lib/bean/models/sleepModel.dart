@@ -370,10 +370,14 @@ class SleepParser {
     }
 
     // Prefer header-driven parsing over index: many firmwares send single-day 0x27
-    // packets for any offset. Try single-day first; if it yields segments, use it.
+    // packets for any offset. Try single-day first; if it yields valid segments, use it.
+    // Guard: consider "valid" only if total duration is within reasonable bounds (1..12h)
     final List<SleepSegment> singleDayAttempt = _parseSingleDayLargeData();
     if (singleDayAttempt.isNotEmpty) {
-      return singleDayAttempt;
+      final int total = singleDayAttempt.fold<int>(0, (p, s) => p + s.segmentEnd.difference(s.segmentStart).inMinutes);
+      if (total >= 60 && total <= 12 * 60) {
+        return singleDayAttempt;
+      }
     }
 
     // Large Data Protocol Multi-Day Structure (0xBC/188, 0x27/39):
@@ -567,14 +571,12 @@ class SleepParser {
       endMinutes = _data[6] | (_data[7] << 8);
     }
 
-    // Calculate base date for Day 0 sleep session
-    DateTime today = DateTime.now();
-    
-    // For Day 0, use a simple approach since times are correctly extracted
-    // Start time 23:21 (1401 min) should be yesterday evening
-    // End time 07:39 (459 min) should be this morning
-    DateTime sleepStartDate = today.subtract(Duration(days: 1)); // Yesterday for 23:21
-    DateTime sleepEndDate = today; // Today for 07:39
+    // Calculate base date for this parser instance using the requested offset
+    // Base day represents the morning that the sleep session ends
+    final DateTime baseDay = DateTime.now().subtract(Duration(days: currentIndex));
+    // Treat single-day packets as an overnight session that ends on baseDay
+    DateTime sleepStartDate = baseDay.subtract(const Duration(days: 1));
+    DateTime sleepEndDate = baseDay;
     
     DateTime bedTime = DateTime(
       sleepStartDate.year, 
