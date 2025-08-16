@@ -369,9 +369,11 @@ class SleepParser {
       return segments; // Not a Large Data Protocol packet
     }
 
-    // SPECIAL CASE: Day 0 uses a completely different packet structure
-    if (currentIndex == 0) {
-      return _parseSingleDayLargeData();
+    // Prefer header-driven parsing over index: many firmwares send single-day 0x27
+    // packets for any offset. Try single-day first; if it yields segments, use it.
+    final List<SleepSegment> singleDayAttempt = _parseSingleDayLargeData();
+    if (singleDayAttempt.isNotEmpty) {
+      return singleDayAttempt;
     }
 
     // Large Data Protocol Multi-Day Structure (0xBC/188, 0x27/39):
