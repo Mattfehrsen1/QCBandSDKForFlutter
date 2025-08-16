@@ -6,8 +6,6 @@ import 'dart:typed_data';
 
 import 'utils/qc_band_sdk_const.dart';
 import 'utils/resolve_util.dart';
-import 'bean/models/alarm.dart';
-import 'bean/models/sleepModel.dart';
 
 class QCBandSDK {
   static const int DATAREADSTART = 0;
@@ -23,7 +21,6 @@ class QCBandSDK {
   static const int TempUnitF = 0x81;
   static const String TAG = "QCBandSDK";
   static bool isRuning = false;
-  static void Function(Map<String, dynamic> live)? _onLiveSport;
 
   static List<int> _generateValue(int size) {
     final List<int> data = List<int>.generate(size, (int index) {
@@ -138,7 +135,7 @@ class QCBandSDK {
       //   return ResolveUtil.getActivityExerciseData(value);
       // case DeviceConst.CMD_SET_TIME:
       //   return ResolveUtil.setTimeSuccessful(value);
-      // case DeviceConst.CMD_GET_SPORTData:
+      // case DeviceConst.CMD_Get_SPORTData:
       //   return ResolveUtil.getExerciseData(value);
       // case DeviceConst.CMD_GET_TIME:
       //   return ResolveUtil.getDeviceTime(value);
@@ -164,48 +161,21 @@ class QCBandSDK {
       //   return ResolveUtil.getDeviceVersion(value);
       // case DeviceConst.CMD_Get_Name:
       //   return ResolveUtil.getDeviceName(value);
-      case QcBandSdkConst.cmdReadHrData:
-        // Heart rate history multi-frame (cmd 21)
-        return ResolveUtil.handleIncomingDataHeartData(
-            Uint8List.fromList(value));
+      // case QcBandSdkConst.cmdReadHrData:
+      //   // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
+      //   return ResolveUtil.handleIncomingDataHeartData(
+      //       Uint8List.fromList(value));
       case QcBandSdkConst.cmdHrv:
-        // HRV history multi-frame (cmd 57)
-        return ResolveUtil.handleIncomingDataHrv(Uint8List.fromList(value));
-      case QcBandSdkConst.cmdGetRealTimeHeartRate:
-        return ResolveUtil.parseRealtimeHeart(value);
-      case QcBandSdkConst.cmdPressureInt:
-        return ResolveUtil.parsePressureDataFrames(value);
-      case QcBandSdkConst.cmdPressureSettingInt:
-        return ResolveUtil.parsePressureSetting(value);
-      case QcBandSdkConst.cmdAutoBloodOxygenInt:
-        // Read/Write auto SpO2 setting response
-        return ResolveUtil.parseAutoBloodOxygenSetting(value);
-      case QcBandSdkConst.cmdHrData:
-        // Auto HR (cmd 22) read/write response
-        return ResolveUtil.getAutoHeart(value);
-      case QcBandSdkConst.cmdHrvEnableInt:
-        // Auto HRV (cmd 56) read/write response
-        return ResolveUtil.parseAutoHrvSetting(value);
-      case 42: // SpO2 classic history (10-byte blocks)
-        print('[SpO2 Classic] Packet received from device. Parsing 10-byte records...');
-        return ResolveUtil.parseSpO2Classic(value);
-      case 120: // phone sport notify (0x78)
-        final res = ResolveUtil.parseLiveSportNotify(value);
-        try {
-          final data = (res['Data'] as Map?) ?? {};
-          _onLiveSport?.call(Map<String, dynamic>.from(data));
-        } catch (_) {}
-        return res;
+        // Delegate heart rate data parsing to ResolveUtil.handleIncomingDataHeartData
+        return ResolveUtil.getHrvTestData(value);
       // case DeviceConst.CMD_Reset:
       //   return ResolveUtil.Reset();
       // case DeviceConst.CMD_Mcu_Reset:
       //   return ResolveUtil.MCUReset();
       // case DeviceConst.CMD_Notify:
       //   return ResolveUtil.Notify();
-      case QcBandSdkConst.cmdGetAlarmClockInt:
-        final res = ResolveUtil.getClockData(value);
-        print('[ALARM] parse ← index=${res['data']?['index']} enabled=${res['data']?['enabled']} time=${res['data']?['hour']}:${res['data']?['minute']}');
-        return res;
+      // case DeviceConst.CMD_Get_ActivityAlarm:
+      //   return ResolveUtil.getActivityAlarm(value);
       // case DeviceConst.CMD_Get_TotalData:
       //   return ResolveUtil.getTotalStepData(value);
       // case DeviceConst.CMD_Get_DetailData:
@@ -348,544 +318,6 @@ class QCBandSDK {
     return ResolveUtil.setMethodError(_getBcdValue(value[0]).toString());
   }
 
-  // ================= Alarms (classic 0x23/0x24) =================
-  static Uint8List buildSetAlarmClassic(Alarm alarm) {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdSetAlarmClockInt; // 35
-    value[1] = alarm.index & 0xFF;
-    value[2] = alarm.enabled ? 1 : 0;
-    // hour/minute in BCD per classic format
-    value[3] = ResolveUtil().decimalToBCD(alarm.hour);
-    value[4] = ResolveUtil().decimalToBCD(alarm.minute);
-    // Seven bytes for Sun..Sat (0/1)
-    for (int i = 0; i < 7; i++) {
-      value[5 + i] = (alarm.repeatDays[i] ? 1 : 0);
-    }
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  static Uint8List buildGetAlarmClassic(int index) {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdGetAlarmClockInt; // 36
-    value[1] = index & 0xFF;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // ================= Vendor Serial (0xBC) helpers and Sport+ =================
-  // -------- Vendor Alarms (0x2C) --------
-  // Repeat bit mask helper: bits 0..6 = Su..Sa, bit7 = enabled flag
-  static int _encodeRepeatAndEnable({required bool enabled, required List<bool> repeatDays}) {
-    int mask = 0;
-    for (int i = 0; i < repeatDays.length && i < 7; i++) {
-      if (repeatDays[i]) mask |= (1 << i);
-    }
-    if (enabled) mask |= 0x80;
-    return mask & 0xFF;
-  }
-
-  // Build vendor read alarms request (payload [0x01])
-  static Uint8List buildVendorAlarmRead() {
-    return buildVendorPacket(0x2C, Uint8List.fromList([0x01]));
-  }
-
-  // Build vendor write alarms request for a single alarm scheduled at minutes since midnight
-  // repeatDays order: [Su, Mo, Tu, We, Th, Fr, Sa]
-  static Uint8List buildVendorAlarmWriteSingle(
-    int minutesSinceMidnight, {
-    bool enabled = true,
-    List<bool>? repeatDays,
-    String content = '',
-  }) {
-    final List<bool> days = repeatDays ?? const [true, true, true, true, true, true, true];
-    final int re = _encodeRepeatAndEnable(enabled: enabled, repeatDays: days);
-    final int minLo = minutesSinceMidnight & 0xFF;
-    final int minHi = (minutesSinceMidnight >> 8) & 0xFF;
-    final List<int> nameBytes = content.isEmpty ? <int>[] : utf8.encode(content);
-    final int alarmLen = 4 + nameBytes.length;
-
-    // payload: [0x02, total=1] + [len, repeatAndEnable, minLo, minHi, content...]
-    final List<int> payload = [0x02, 0x01, alarmLen & 0xFF, re, minLo, minHi, ...nameBytes];
-    return buildVendorPacket(0x2C, Uint8List.fromList(payload));
-  }
-
-  // Build vendor write for many alarms at once. Each item expects keys:
-  //  - minutesSinceMidnight (int)
-  //  - enabled (bool)
-  //  - repeatDays (List<bool> len<=7, order Su..Sa)
-  //  - content (String, optional)
-  static Uint8List buildVendorAlarmWriteMany(List<Map<String, dynamic>> alarms) {
-    final int total = alarms.length & 0xFF;
-    List<int> payload = [0x02, total];
-    for (final a in alarms) {
-      final int minutes = (a['minutesSinceMidnight'] ?? 0) as int;
-      final bool enabled = (a['enabled'] ?? true) as bool;
-      final List<bool> repeatDays = (a['repeatDays'] as List<bool>?) ?? const [true, true, true, true, true, true, true];
-      final String content = (a['content'] ?? '') as String;
-      final int re = _encodeRepeatAndEnable(enabled: enabled, repeatDays: repeatDays);
-      final List<int> nameBytes = content.isEmpty ? <int>[] : utf8.encode(content);
-      final int alarmLen = 4 + nameBytes.length;
-      payload.addAll([alarmLen & 0xFF, re, minutes & 0xFF, (minutes >> 8) & 0xFF]);
-      if (nameBytes.isNotEmpty) payload.addAll(nameBytes);
-    }
-    return buildVendorPacket(0x2C, Uint8List.fromList(payload));
-  }
-
-  // Build vendor write clearing all alarms (total=0)
-  static Uint8List buildVendorAlarmClear() {
-    return buildVendorPacket(0x2C, Uint8List.fromList([0x02, 0x00]));
-  }
-
-  // Parse vendor alarm payload (payload bytes only, not including 0xBC header)
-  // Returns a list of maps: { minutes: int, enabled: bool, repeatDays: List<bool>(7), content: String }
-  static List<Map<String, dynamic>> parseVendorAlarmPayload(Uint8List payload) {
-    final List<Map<String, dynamic>> out = [];
-    if (payload.isEmpty) return out;
-    // Expect [readFlag(1)=1][total(1)][alarmLen][repeatAndEnable][minLo][minHi][content...][nextAlarmLen]...
-    int idx = 0;
-    final int readFlag = payload[idx] & 0xFF; idx += (idx < payload.length ? 1 : 0);
-    final int total = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx += (idx < payload.length ? 1 : 0);
-    if (readFlag != 1 || total == 0) return out;
-    for (int i = 0; i < total; i++) {
-      if (idx >= payload.length) break;
-      final int alarmLen = payload[idx] & 0xFF; idx++;
-      if (idx + alarmLen - 1 > payload.length) {
-        // malformed
-        break;
-      }
-      final int re = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx++;
-      final int minLo = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx++;
-      final int minHi = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx++;
-      final int minutes = (minHi << 8) | minLo;
-      // Remaining bytes for this alarm: content
-      final int contentLen = (alarmLen > 4) ? (alarmLen - 4) : 0;
-      String content = '';
-      if (contentLen > 0 && idx + contentLen <= payload.length) {
-        content = utf8.decode(payload.sublist(idx, idx + contentLen), allowMalformed: true);
-      }
-      idx += contentLen;
-      final bool enabled = (re & 0x80) != 0;
-      final List<bool> days = List<bool>.generate(7, (d) => ((re >> d) & 0x01) != 0);
-      out.add({
-        'minutes': minutes,
-        'enabled': enabled,
-        'repeatDays': days,
-        'content': content,
-      });
-    }
-    return out;
-  }
-
-  // Build vendor packet using ResolveUtil.addHeader
-  static Uint8List buildVendorPacket(int cmd, [Uint8List? payload]) {
-    return ResolveUtil().addHeader(cmd, payload);
-  }
-
-  // On-device sport control (operateSportModeWithType:state:)
-  // NOTE: Opcode not present in decompiled listing; use 0x40 as tentative (will be verified via logs).
-  // Payload layout [sportType(1), state(1)] based on iOS header semantics.
-  static Uint8List startOnDeviceSport(int sportType) {
-    // Some firmwares expect [state, sportType, sourceType] ordering.
-    // Use sourceType=1 (App) — several firmwares expect app as the controller
-    final payload = Uint8List.fromList([
-      QcBandSdkConst.ACTION_START,
-      sportType & 0xFF,
-      0x01,
-    ]);
-    final pkt = buildVendorPacket(0x40, payload);
-    print('opSport start → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
-    return pkt;
-  }
-
-  static Uint8List pauseOnDeviceSport(int sportType) {
-    final payload = Uint8List.fromList([
-      QcBandSdkConst.ACTION_PAUSE,
-      sportType & 0xFF,
-      0x01,
-    ]);
-    final pkt = buildVendorPacket(0x40, payload);
-    print('opSport pause → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
-    return pkt;
-  }
-
-  static Uint8List continueOnDeviceSport(int sportType) {
-    final payload = Uint8List.fromList([
-      QcBandSdkConst.ACTION_CONTINUE,
-      sportType & 0xFF,
-      0x01,
-    ]);
-    final pkt = buildVendorPacket(0x40, payload);
-    print('opSport continue → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
-    return pkt;
-  }
-
-  static Uint8List stopOnDeviceSport(int sportType) {
-    final payload = Uint8List.fromList([
-      QcBandSdkConst.ACTION_STOP,
-      sportType & 0xFF,
-      0x01,
-    ]);
-    final pkt = buildVendorPacket(0x40, payload);
-    print('opSport stop → ${pkt.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
-    return pkt;
-  }
-
-  // ================= Phone-controlled sport (Nordic UART 6e40...) =================
-  // The production APK uses command 0x77 with a fixed 16-byte packet and 8-bit sum CRC.
-  // Frame layout:
-  // [0]:   key = 0x77
-  // [1..14]: payload (we use [status, sportType] then zeros)
-  // [15]:  crc8 = sum(bytes[0..14]) & 0xFF
-  static Uint8List _buildPhoneSportCmd(int status, int sportType) {
-    final data = Uint8List(16);
-    data[0] = 0x77;
-    data[1] = status & 0xFF;
-    data[2] = sportType & 0xFF;
-    // rest already zero
-    int sum = 0;
-    for (int i = 0; i < 15; i++) {
-      sum = (sum + (data[i] & 0xFF)) & 0xFF;
-    }
-    data[15] = sum & 0xFF;
-    return data;
-  }
-
-  // Status mapping observed in production APK:
-  // 1=start, 2=pause, 3=continue, 4=stop, 6=pre-stop
-  static Uint8List phoneSportStart(int sportType) => _buildPhoneSportCmd(1, sportType);
-  static Uint8List phoneSportPause(int sportType) => _buildPhoneSportCmd(2, sportType);
-  static Uint8List phoneSportContinue(int sportType) => _buildPhoneSportCmd(3, sportType);
-  static Uint8List phoneSportPreStop(int sportType) => _buildPhoneSportCmd(6, sportType);
-  static Uint8List phoneSportStop(int sportType) => _buildPhoneSportCmd(4, sportType);
-
-  // Convenience: full stop sequence (pre-stop then stop)
-  static List<Uint8List> phoneSportStopSequence(int sportType) {
-    return [
-      phoneSportPreStop(sportType),
-      phoneSportStop(sportType),
-    ];
-  }
-
-  // Sport+ history
-  // 0x41 summary request: payload 4-byte LE timestamp
-  static Uint8List buildSportPlusSummaryReq(int unixTs) {
-    final b = ByteData(4)..setUint32(0, unixTs, Endian.little);
-    final payload = b.buffer.asUint8List();
-    return buildVendorPacket(0x41, payload);
-  }
-
-  // 0x43 details request: payload [sportType(1), ts(4 LE)]
-  static Uint8List buildSportPlusDetailsReq(int sportType, int startTime) {
-    final b = ByteData(5);
-    b.setUint8(0, sportType & 0xFF);
-    b.setUint32(1, startTime, Endian.little);
-    final payload = b.buffer.asUint8List();
-    return buildVendorPacket(0x43, payload);
-  }
-
-  // Assemble chunked responses for summary (0x42) and details (0x44/0x45)
-  static Uint8List? _spSummaryBuf;
-  static int _spSummaryTotal = 0;
-  static int _spSummaryReceived = 0;
-
-  static Uint8List? _spDetailsBuf;
-  static int _spDetailsTotal = 0;
-  static int _spDetailsReceived = 0;
-  static Map<String, dynamic>? _spDetailsMeta;
-  // SpO2 vendor trend assembly state (0xBC/0x2A)
-  static Uint8List? _spo2TrendBuf;
-  static int _spo2TrendTotal = 0;
-  static int _spo2TrendReceived = 0;
-  static void Function(List<Map<String, dynamic>> summaries)? _onSpSummary;
-  static void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond)? _onSpDetails;
-
-  // Public API: summary fetch with assembler and callback
-  static Future<void> getSportPlusSummaryFromTimestamp(
-    int unixTs,
-    void Function(List<Map<String, dynamic>> summaries) onResult,
-  ) async {
-    _spSummaryBuf = null;
-    _spSummaryTotal = 0;
-    _spSummaryReceived = 0;
-    _onSpSummary = onResult;
-    print('SP+ summary → ts=$unixTs');
-  }
-
-  // Public API: details fetch with assembler and callback
-  static Future<void> getSportPlusDetailsFor(
-    int sportType,
-    int startTime,
-    void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond) onResult,
-  ) async {
-    _spDetailsBuf = null;
-    _spDetailsTotal = 0;
-    _spDetailsReceived = 0;
-    _spDetailsMeta = null;
-    _onSpDetails = onResult;
-    print('SP+ details → type=$sportType ts=$startTime');
-  }
-
-  // Feed incoming notify data to assemble Sport+ messages (0xBC vendor channel)
-  static void ingestVendorNotification(List<int> value) {
-    if (value.isEmpty) return;
-    try {
-      // Ignore non-0xBC frames unless we're in the middle of assembling
-      if (value[0] != 0xBC && _spSummaryTotal == 0 && _spDetailsTotal == 0 && _sleepTotal == 0) {
-        return;
-      }
-      if (value.length >= 6 && value[0] == 0xBC) {
-        final int cmd = value[1] & 0xFF;
-        final int total = (value[2] & 0xFF) | ((value[3] & 0xFF) << 8);
-        final Uint8List payload = Uint8List.fromList(value.sublist(6));
-        print('[SleepSDK] Vendor frame received (0xBC). Command=0x${cmd.toRadixString(16)}, expectedTotalBytes=$total, chunkBytes=${payload.length}');
-        if (cmd == 0x02) {
-          // Some firmwares ACK with 0x02 before streaming data
-          print('[SleepSDK] ACK received from device. Waiting for sleep data...');
-        }
-        // Sleep details (0x39 or 0x27)
-        if (cmd == 0x39 || cmd == 0x27) {
-          if (_sleepTotal == 0) {
-            _sleepTotal = total;
-            _sleepBuf = Uint8List(_sleepTotal);
-            _sleepReceived = 0;
-            print('[SleepSDK] Sleep data header. totalBytes=$_sleepTotal, forOffset=${_sleepRequestedOffset ?? -1} (0=today)');
-          }
-          if (_sleepBuf != null) {
-            final int end = (_sleepReceived + payload.length).clamp(0, _sleepTotal);
-            _sleepBuf!.setRange(_sleepReceived, end, payload.sublist(0, end - _sleepReceived));
-            _sleepReceived = end;
-            final pct = _sleepTotal > 0 ? ((_sleepReceived * 100) ~/ _sleepTotal) : 0;
-            print('[SleepSDK] Receiving sleep data... $_sleepReceived/$_sleepTotal bytes (${pct}%)');
-            if (_sleepReceived >= _sleepTotal) {
-              final offset = _sleepRequestedOffset ?? 0;
-              print('[SleepSDK] Sleep data fully received for offset=$offset. Parsing...');
-              _onSleepPayloadAssembled(_sleepBuf!, offset);
-              _sleepBuf = null; _sleepTotal = 0; _sleepReceived = 0;
-            }
-          }
-          return;
-        }
-        // SpO2 vendor trend (0x2A / 42)
-        if (cmd == 0x2A) {
-          // total is complete payload len; these frames can come chunked
-          // Assemble using a dedicated buffer similar to sleep/sport+
-          if (_spo2TrendTotal == 0) {
-            _spo2TrendTotal = total;
-            _spo2TrendBuf = Uint8List(_spo2TrendTotal);
-            _spo2TrendReceived = 0;
-            print('[SpO2] Vendor trend header. totalBytes=$_spo2TrendTotal');
-          }
-          if (_spo2TrendBuf != null) {
-            final int end = (_spo2TrendReceived + payload.length).clamp(0, _spo2TrendTotal);
-            _spo2TrendBuf!.setRange(_spo2TrendReceived, end, payload.sublist(0, end - _spo2TrendReceived));
-            _spo2TrendReceived = end;
-            final pct = _spo2TrendTotal > 0 ? ((_spo2TrendReceived * 100) ~/ _spo2TrendTotal) : 0;
-            print('[SpO2 Trend] Receiving vendor trend data from device... $_spo2TrendReceived/$_spo2TrendTotal bytes (${pct}%)');
-            if (_spo2TrendReceived >= _spo2TrendTotal) {
-              final res = ResolveUtil.parseSpO2VendorPayload(_spo2TrendBuf!);
-              final days = (res['data']?['days'] as List?)?.length ?? 0;
-              print('[SpO2 Trend] All data received. Parsed $days day(s) of hourly min/max arrays.');
-              try { _onSpO2Trend?.call(res); } catch (_) {}
-              _spo2TrendBuf = null; _spo2TrendTotal = 0; _spo2TrendReceived = 0;
-            }
-          }
-          return;
-        }
-        if (cmd == 0x42) {
-          if (_spSummaryTotal == 0) {
-            _spSummaryTotal = total;
-            _spSummaryBuf = Uint8List(_spSummaryTotal);
-            _spSummaryReceived = 0;
-          }
-          if (_spSummaryBuf != null) {
-            final int end = (_spSummaryReceived + payload.length).clamp(0, _spSummaryTotal);
-            _spSummaryBuf!.setRange(_spSummaryReceived, end, payload.sublist(0, end - _spSummaryReceived));
-            _spSummaryReceived = end;
-            if (_spSummaryReceived >= _spSummaryTotal) {
-              final summaries = ResolveUtil.parseSportPlusSummaryBuffer(_spSummaryBuf!);
-              for (final s in summaries) {
-                final iso = DateTime.fromMillisecondsSinceEpoch(((s['startTime'] ?? 0) as int) * 1000, isUtc: true).toIso8601String();
-                print('SP+ summary: type=${s['sportType']} start=$iso dur=${s['duration']} dist=${s['distance']} cal=${s['calories']} hr[min/avg/max]=[${s['hrMin']}/${s['hrAvg']}/${s['hrMax']}]');
-              }
-              _onSpSummary?.call(summaries);
-              _spSummaryBuf = null; _spSummaryTotal = 0; _spSummaryReceived = 0;
-            }
-          }
-          return;
-        }
-        if (cmd == 0x44) {
-          _spDetailsMeta = ResolveUtil.parseSportPlusDetailsMeta(payload);
-          final pkgCount = _spDetailsMeta?['packageCount'] ?? 0;
-          print('SP+ details meta: packages=$pkgCount sampleSecond=${_spDetailsMeta?['sampleSecond']}');
-          return;
-        }
-        if (cmd == 0x45) {
-          if (_spDetailsTotal == 0) {
-            _spDetailsTotal = total;
-            _spDetailsBuf = Uint8List(_spDetailsTotal);
-            _spDetailsReceived = 0;
-          }
-          if (_spDetailsBuf != null) {
-            final int end = (_spDetailsReceived + payload.length).clamp(0, _spDetailsTotal);
-            _spDetailsBuf!.setRange(_spDetailsReceived, end, payload.sublist(0, end - _spDetailsReceived));
-            _spDetailsReceived = end;
-            if (_spDetailsReceived >= _spDetailsTotal) {
-              final meta = _spDetailsMeta ?? {};
-              final hrSeries = ResolveUtil.extractHrSeriesFromDetails(_spDetailsBuf!, meta);
-              final sampleSecond = (meta['sampleSecond'] ?? 0) as int;
-              print('SP+ details: samples=${hrSeries.length} sampleSecond=$sampleSecond');
-              // Attempt to link with last summary for convenience
-              Map<String, dynamic> summary = {};
-              _onSpDetails?.call(summary, hrSeries, sampleSecond);
-              _spDetailsBuf = null; _spDetailsTotal = 0; _spDetailsReceived = 0; _spDetailsMeta = null;
-            }
-          }
-          return;
-        }
-      } else {
-        // Continuation chunk without header (summary or details)
-        final Uint8List payload = Uint8List.fromList(value);
-        if (_sleepTotal > 0 && _sleepBuf != null) {
-          final int end = (_sleepReceived + payload.length).clamp(0, _sleepTotal);
-          _sleepBuf!.setRange(_sleepReceived, end, payload.sublist(0, end - _sleepReceived));
-          _sleepReceived = end;
-          final pct = _sleepTotal > 0 ? ((_sleepReceived * 100) ~/ _sleepTotal) : 0;
-          print('[SleepSDK] Receiving sleep data... $_sleepReceived/$_sleepTotal bytes (${pct}%)');
-          if (_sleepReceived >= _sleepTotal) {
-            final offset = _sleepRequestedOffset ?? 0;
-            print('[SleepSDK] Sleep data fully received for offset=$offset. Parsing...');
-            _onSleepPayloadAssembled(_sleepBuf!, offset);
-            _sleepBuf = null; _sleepTotal = 0; _sleepReceived = 0;
-          }
-          return;
-        }
-        if (_spSummaryTotal > 0 && _spSummaryBuf != null) {
-          final int end = (_spSummaryReceived + payload.length).clamp(0, _spSummaryTotal);
-          _spSummaryBuf!.setRange(_spSummaryReceived, end, payload.sublist(0, end - _spSummaryReceived));
-          _spSummaryReceived = end;
-          if (_spSummaryReceived >= _spSummaryTotal) {
-            final summaries = ResolveUtil.parseSportPlusSummaryBuffer(_spSummaryBuf!);
-            for (final s in summaries) {
-              final iso = DateTime.fromMillisecondsSinceEpoch(((s['startTime'] ?? 0) as int) * 1000, isUtc: true).toIso8601String();
-              print('SP+ summary: type=${s['sportType']} start=$iso dur=${s['duration']} dist=${s['distance']} cal=${s['calories']} hr[min/avg/max]=[${s['hrMin']}/${s['hrAvg']}/${s['hrMax']}]');
-            }
-            _onSpSummary?.call(summaries);
-            _spSummaryBuf = null; _spSummaryTotal = 0; _spSummaryReceived = 0;
-          }
-          return;
-        }
-        if (_spDetailsTotal > 0 && _spDetailsBuf != null) {
-          final int end = (_spDetailsReceived + payload.length).clamp(0, _spDetailsTotal);
-          _spDetailsBuf!.setRange(_spDetailsReceived, end, payload.sublist(0, end - _spDetailsReceived));
-          _spDetailsReceived = end;
-          if (_spDetailsReceived >= _spDetailsTotal) {
-            final meta = _spDetailsMeta ?? {};
-            final hrSeries = ResolveUtil.extractHrSeriesFromDetails(_spDetailsBuf!, meta);
-            final sampleSecond = (meta['sampleSecond'] ?? 0) as int;
-            print('SP+ details: samples=${hrSeries.length} sampleSecond=$sampleSecond');
-            Map<String, dynamic> summary = {};
-            _onSpDetails?.call(summary, hrSeries, sampleSecond);
-            _spDetailsBuf = null; _spDetailsTotal = 0; _spDetailsReceived = 0; _spDetailsMeta = null;
-          }
-          return;
-        }
-      }
-    } catch (e) {
-      print('SP+ ingest error: $e');
-    }
-  }
-
-  // Optional: set live sport listener (phone-controlled 0x78 frames)
-  static void setLiveSportListener(void Function(Map<String, dynamic> live)? listener) {
-    _onLiveSport = listener;
-  }
-
-  // Optional listener for SpO2 vendor trend
-  static void Function(Map<String, dynamic> trend)? _onSpO2Trend;
-  static void setSpO2TrendListener(void Function(Map<String, dynamic> trend)? listener) {
-    _onSpO2Trend = listener;
-  }
-
-  // Helper: feed standard characteristic notifications
-  static Map<String, dynamic> ingestStandardNotification(List<int> value) {
-    if (value.isEmpty) {
-      return <String, dynamic>{};
-    }
-    try {
-      return Map<String, dynamic>.from(DataParsingWithData(value));
-    } catch (_) {
-      return <String, dynamic>{};
-    }
-  }
-
-  // One-shot helpers that register callbacks and return request payloads.
-  // Call getSportPlusSummaryRequest first, write it, and receive summaries via the callback.
-  static Uint8List getSportPlusSummaryRequest(
-    int unixTs,
-    void Function(List<Map<String, dynamic>> summaries) onResult,
-  ) {
-    _spSummaryBuf = null;
-    _spSummaryTotal = 0;
-    _spSummaryReceived = 0;
-    _onSpSummary = onResult;
-    return buildSportPlusSummaryReq(unixTs);
-  }
-
-  // Then for a specific workout, register details callback and get the request to write.
-  static Uint8List getSportPlusDetailsRequest(
-    int sportType,
-    int startTime,
-    void Function(Map<String, dynamic> summary, List<int> hrSeries, int sampleSecond) onResult,
-  ) {
-    _spDetailsBuf = null;
-    _spDetailsTotal = 0;
-    _spDetailsReceived = 0;
-    _spDetailsMeta = null;
-    _onSpDetails = onResult;
-    return buildSportPlusDetailsReq(sportType, startTime);
-  }
-
-  // Build a portable workout JSON from a Sport+ summary and details
-  static Map<String, dynamic> buildWorkoutJson(
-    Map<String, dynamic> summary,
-    List<int> hrSeries,
-    int sampleSecond,
-  ) {
-    final int start = (summary['startTime'] ?? 0) as int;
-    final int duration = (summary['duration'] ?? 0) as int;
-    final int dist = (summary['distance'] ?? 0) as int;
-    final int calRaw = (summary['calories'] ?? 0) as int;
-    final int steps = (summary['steps'] ?? 0) as int;
-    final int sportType = (summary['sportType'] ?? 0) as int;
-
-    final int minHr = (summary['hrMin'] ?? (hrSeries.isEmpty ? 0 : hrSeries.reduce((a, b) => a < b ? a : b))) as int;
-    final int maxHr = (summary['hrMax'] ?? (hrSeries.isEmpty ? 0 : hrSeries.reduce((a, b) => a > b ? a : b))) as int;
-    final int avgHr = (summary['hrAvg'] ?? (hrSeries.isEmpty ? 0 : (hrSeries.reduce((a, b) => a + b) ~/ hrSeries.length))) as int;
-
-    // Many firmwares use fixed-point for calories. Keep raw and a normalized guess (kcal).
-    final double caloriesKcalGuess = calRaw / 1000.0;
-
-    return {
-      'id': '$sportType-$start',
-      'source': 'sport+',
-      'sportType': sportType,
-      'startTime': start,
-      'endTime': start + duration,
-      'durationSec': duration,
-      'distanceMeters': dist,
-      'steps': steps,
-      'caloriesRaw': calRaw,
-      'caloriesKcal': double.parse(caloriesKcalGuess.toStringAsFixed(1)),
-      'hr': {
-        'sampleSecond': sampleSecond,
-        'min': minHr,
-        'avg': avgHr,
-        'max': maxHr,
-        'samples': hrSeries,
-      },
-    };
-  }
   static Uint8List runDeviceCallibration(int type) {
     return Uint8List.fromList([0xA1, type]);
   }
@@ -1117,23 +549,25 @@ class QCBandSDK {
 //     return Uint8List.fromList(value);
 //   }
 
-  /// 发送运动模式心跳包 (App 控制多运动模式的保活)
-  /// Every 1 second while in phone-controlled multi-sport mode, send this to prevent exit
-  static Uint8List sendHeartPackage(double distanceMeters, int elapsedSeconds, int rssi) {
-    final List<int> value = _generateInitValue();
-    final bData = ByteData(8);
-    final int min = elapsedSeconds ~/ 60;
-    final int second = elapsedSeconds % 60;
-    bData.setFloat32(0, distanceMeters, Endian.little);
-    final List<int> distanceValue = bData.buffer.asUint8List(0, 4);
-    value[0] = 0x5A; // CMD_heart_package (90)
-    arrayCopy(distanceValue, 0, value, 1, distanceValue.length);
-    value[5] = min;
-    value[6] = second;
-    value[7] = rssi;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
+//   ///发送运动模式心跳包(配合"EnterActivityMode"使用)
+//   ///当手环是通过APP进入多运动模式后，APP必须每隔1秒发送一个数据给手环，否则手环会退出多运动模式
+//   ///Send a sports mode heartbeat packet (used in conjunction with 'EnterActivityMode')
+//   ///When the bracelet enters multi sport mode through the APP, the APP must send data to the bracelet every 1 second, otherwise the bracelet will exit multi sport mode
+//   static Uint8List sendHeartPackage(double distance, int space, int rssi) {
+//     List<int> value = _generateInitValue();
+//     final bData = ByteData(8);
+//     int min = space ~/ 60;
+//     int second = space % 60;
+//     bData.setFloat32(0, distance, Endian.little);
+//     final List<int> distanceValue = bData.buffer.asUint8List(0, 4);
+//     value[0] = DeviceConst.CMD_heart_package;
+//     arrayCopy(distanceValue, 0, value, 1, distanceValue.length);
+//     value[5] = min;
+//     value[6] = second;
+//     value[7] = rssi;
+//     _crcValue(value);
+//     return Uint8List.fromList(value);
+//   }
 
 //   ///获取某天总数据
 //   ///0:表⽰是从最新的位置开始读取(最多50组数据)  2:表⽰接着读取(当数据总数⼤于50的时候) 0x99:表⽰删除所有运动数据
@@ -1241,98 +675,6 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
-  // ===== Sleep (details by day offset via vendor 0x39) =====
-  static Uint8List? _sleepBuf;
-  static int _sleepTotal = 0;
-  static int _sleepReceived = 0;
-  static int? _sleepRequestedOffset;
-  static void Function(Map<String, dynamic> sleep)? _onSleep;
-
-  static void setSleepListener(void Function(Map<String, dynamic> sleep)? listener) {
-    _onSleep = listener;
-  }
-
-  static Uint8List getSleepDetailForOffset(int offset) {
-    // Validate and clamp 0..29
-    int clamped = offset;
-    if (clamped < 0) clamped = 0;
-    if (clamped > 29) clamped = 29;
-    _sleepRequestedOffset = clamped;
-    // Use 0..0 range for full-day request (device interprets as all segments)
-    final req = generateReadSleepDetailsCommand(clamped, 0, 0);
-    print('[SleepSDK] Requesting sleep for offset=$clamped (0=today). Sending vendor cmd 0x27...');
-    return req;
-  }
-
-  static void _onSleepPayloadAssembled(Uint8List payload, int offset) {
-    try {
-      // Reconstruct full frame with header for parser: [0xBC,0x27,lenLo,lenHi,0,0] + payload
-      final int len = payload.length;
-      final Uint8List full = Uint8List(len + 6);
-      full[0] = 0xBC;
-      full[1] = 0x27;
-      full[2] = len & 0xFF;
-      full[3] = (len >> 8) & 0xFF;
-      full[4] = 0x00;
-      full[5] = 0x00;
-      full.setRange(6, 6 + len, payload);
-
-      final parser = SleepParser(full, currentIndex: offset);
-      final summary = parser.getSleepSummaryWithTimestamps();
-      final bedTime = summary.bedTime;
-      final wakeTime = summary.wakeTime;
-      final durations = summary.durations;
-      final segments = summary.segments;
-
-      // Build normalized map
-      final DateTime dateBase = bedTime ?? DateTime.now().toUtc().subtract(Duration(days: offset));
-      final String dateStr = '${dateBase.year.toString().padLeft(4,'0')}-${dateBase.month.toString().padLeft(2,'0')}-${dateBase.day.toString().padLeft(2,'0')}';
-      final Map<String, dynamic> result = {
-        'dataType': 'SleepDetail',
-        'end': true,
-        'data': {
-          'date': dateStr,
-          'bedTime': bedTime?.toIso8601String(),
-          'wakeTime': wakeTime?.toIso8601String(),
-          'totals': {
-            'deep': durations['deepSleep'] ?? 0,
-            'light': durations['lightSleep'] ?? 0,
-            'rem': durations['rapidEyeMovement'] ?? 0,
-            'awake': durations['awake'] ?? 0,
-          },
-          'segments': segments.map((s) => {
-            'start': s.segmentStart.toIso8601String(),
-            'end': s.segmentEnd.toIso8601String(),
-            'stage': s.stageType,
-          }).toList(),
-        }
-      };
-
-      final int nSeg = segments.length;
-      final int deep = durations['deepSleep'] ?? 0;
-      final int light = durations['lightSleep'] ?? 0;
-      final int rem = durations['rapidEyeMovement'] ?? 0;
-      final int awake = durations['awake'] ?? 0;
-      print('[SleepSDK] Parsed sleep for $dateStr → segments=$nSeg, deep=$deep, light=$light, rem=$rem, awake=$awake');
-      if (segments.isNotEmpty) {
-        final preview = segments.take(3).map((s)=>'${s.segmentStart.toIso8601String()} to ${s.segmentEnd.toIso8601String()} (stage ${s.stageType})').join('; ');
-        print('[SleepSDK] First segments: $preview');
-      }
-
-      try { _onSleep?.call(result); } catch (_) {}
-    } catch (e) {
-      print('Sleep parse error: $e');
-    }
-  }
-
-  // Request device function support (cmd 0x3C = 60)
-  static Uint8List getDeviceFunctionSupport() {
-    final List<int> value = _generateInitValue();
-    value[0] = 60; // QcBandSdkConst.cmdDeviceFunctionSupport
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
   static Uint8List GetStepOfToday() {
     final List<int> value = _generateInitValue();
     value[0] = QcBandSdkConst.cmdStepDataToday;
@@ -1374,41 +716,6 @@ class QCBandSDK {
     Uint8List commandPacket = ResolveUtil().addHeader(42, requestDataPayload);
 
     return Uint8List.fromList(commandPacket);
-  }
-
-  // ================= SpO2 classic helpers (16-byte commands) =================
-  // Classic: mode 0=latest, 2=continue, 0x99=delete
-  static Uint8List getSpO2HistoryLatest() {
-    final List<int> value = _generateInitValue();
-    value[0] = 42; // classic SpO2 history command id
-    value[1] = 0x00;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  static Uint8List getSpO2HistoryContinue() {
-    final List<int> value = _generateInitValue();
-    value[0] = 42;
-    value[1] = 0x02;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  static Uint8List deleteSpO2History() {
-    final List<int> value = _generateInitValue();
-    value[0] = 42;
-    value[1] = 0x99;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  static Uint8List getSpO2HistoryFrom(String time) {
-    final List<int> value = _generateInitValue();
-    value[0] = 42;
-    value[1] = 0x00; // start from time
-    _insertDateValue(value, time);
-    _crcValue(value);
-    return Uint8List.fromList(value);
   }
 
   static Uint8List getSleepData(int index) {
@@ -1463,35 +770,6 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
-  // ===== Stress (Pressure) =====
-  // Read stress data for a given day offset (0=today, 1..6 previous days)
-  static Uint8List getStressByOffset(int offset) {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdPressureInt; // 55
-    value[1] = offset & 0xFF;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // Read auto-stress setting (enable/disable)
-  static Uint8List getStressSetting() {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdPressureSettingInt; // 54
-    value[1] = 0x01; // read
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // Write auto-stress setting
-  static Uint8List setStressSetting(bool enable) {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdPressureSettingInt; // 54
-    value[1] = 0x02; // write
-    value[2] = enable ? 0x01 : 0x00;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
   static Uint8List startWorkOut() {
     final List<int> value = _generateInitValue();
     value[0] = 119;
@@ -1524,45 +802,6 @@ class QCBandSDK {
     value[0] = 119;
     value[1] = 4;
     value[2] = 4;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-  
-  // New: generic phone-sport command with sport type
-  // status: 1=start, 2=pause, 3=continue, 4=stop
-  // sportType examples: 4=Walk, 7=Run, 8=Hike, 9=Cycling, 10=Other, 20..36, 60
-  static Uint8List phoneSport(int status, {int sportType = 4}) {
-    final List<int> value = _generateInitValue();
-    value[0] = 119;
-    value[1] = status;
-    value[2] = sportType;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // Backward-compatible helpers with sportType parameter
-  static Uint8List startWorkOutWithType({int sportType = 4}) =>
-      phoneSport(QcBandSdkConst.ACTION_START, sportType: sportType);
-  static Uint8List pauseWorkOutWithType({int sportType = 4}) =>
-      phoneSport(QcBandSdkConst.ACTION_PAUSE, sportType: sportType);
-  static Uint8List continueWorkOutWithType({int sportType = 4}) =>
-      phoneSport(QcBandSdkConst.ACTION_CONTINUE, sportType: sportType);
-  static Uint8List stopWorkOutWithType({int sportType = 4}) =>
-      phoneSport(QcBandSdkConst.ACTION_STOP, sportType: sportType);
-
-  static Uint8List getAlarms() {
-    // 0xbc2c01007e8001
-    // 188,44
-    // [188, 42, 1, 0, 255, 0, 255]
-
-    final List<int> value = _generateInitValue();
-    value[0] = 188;
-    value[1] = 44;
-    value[2] = 1;
-    value[3] = 0;
-    value[4] = 126;
-    value[5] = 128;
-    value[6] = 1;
     _crcValue(value);
     return Uint8List.fromList(value);
   }
@@ -1627,19 +866,6 @@ class QCBandSDK {
     value[1] = offset;
 
     _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // Helper: HRV request by day offset (0=today..6)
-  static Uint8List getHrvByOffset(int offset) {
-    int clamped = offset;
-    if (clamped < 0) clamped = 0;
-    if (clamped > 6) clamped = 6;
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdHrv;
-    value[1] = clamped & 0xFF;
-    _crcValue(value);
-    print('[HRV] Requesting history: offsetDays=$clamped (0=today), cmd=57');
     return Uint8List.fromList(value);
   }
 
@@ -1726,13 +952,6 @@ class QCBandSDK {
 
     log('Attempting to write: ${Uint8List.fromList(value)}');
 
-    return Uint8List.fromList(value);
-  }
-  
-  static Uint8List rebootDevice() {
-    final List<int> value = _generateInitValue();
-    value[0] = 8;
-    _crcValue(value);
     return Uint8List.fromList(value);
   }
 //   ///重启设备
@@ -1976,8 +1195,7 @@ class QCBandSDK {
 //   ///1 Heart rate 2 Blood oxygen 3 Temperature 4 HRV
   static Uint8List GetAutomaticHRMonitoring() {
     final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdHrData; // 22
-    value[1] = 0x01; // read
+    value[0] = QcBandSdkConst.cmdStartHeartRateInt;
     _crcValue(value);
     return Uint8List.fromList(value);
   }
@@ -1990,47 +1208,12 @@ class QCBandSDK {
     return Uint8List.fromList(value);
   }
 
-  // Preferred realtime HR control (cmd 105 type=6), aligned with production app
-  static Uint8List realtimeHeartControl(int action) {
-    // action: 1=start, 2=pause, 3=continue, 4=stop
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdStartHeartRateInt; // 105
-    value[1] = 6; // type=realtime heart
-    value[2] = action & 0xFF; // sub
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  static Uint8List startRealtimeHeart() => realtimeHeartControl(QcBandSdkConst.ACTION_START);
-  static Uint8List stopRealtimeHeart() => realtimeHeartControl(QcBandSdkConst.ACTION_STOP);
-
   static Uint8List SetAutomaticHRMonitoring(bool enable, int interval) {
     final List<int> value = _generateInitValue(); // likely 16 bytes
     value[0] = QcBandSdkConst.cmdHrData; // 22
     value[1] = 2; // write
     value[2] = enable ? 1 : 2;
     value[3] = interval;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // ===== Auto SpO2 (cmd 44) =====
-  // Read auto SpO2 monitoring enable/interval
-  static Uint8List getAutoSpO2Setting() {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdAutoBloodOxygenInt; // 44
-    value[1] = 0x01; // read
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // Write auto SpO2 monitoring enable/interval (interval in minutes)
-  static Uint8List setAutoSpO2Setting({required bool enable, required int intervalMinutes}) {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdAutoBloodOxygenInt; // 44
-    value[1] = 0x02; // write
-    value[2] = enable ? 0x01 : 0x00;
-    value[3] = intervalMinutes & 0xFF;
     _crcValue(value);
     return Uint8List.fromList(value);
   }
@@ -2278,25 +1461,7 @@ class QCBandSDK {
 //     _crcValue(value);
 //     return Uint8List.fromList(value);
 //   }
-
-  // Read auto HRV setting (enable/disable)
-  static Uint8List getAutoHrvSetting() {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdHrvEnableInt; // 56
-    value[1] = 0x01; // read
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
-
-  // Write auto HRV setting
-  static Uint8List setAutoHrvSetting(bool enable) {
-    final List<int> value = _generateInitValue();
-    value[0] = QcBandSdkConst.cmdHrvEnableInt; // 56
-    value[1] = 0x02; // write
-    value[2] = enable ? 0x01 : 0x00;
-    _crcValue(value);
-    return Uint8List.fromList(value);
-  }
+// }
 }
 
 Uint8List intToLittleEndian4Bytes(int value) {
