@@ -237,6 +237,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
     final cmd = QCBandSDK.getHrvByOffset(offset);
     int expectedTotal = 0;
     int progress = 0;
+    // Fallback logging helpers for raw HRV frames
+    int? _hrvHeaderRangeMin; // minutes between samples
+    bool _hrvPrintedFallback = false;
     Map<String, dynamic>? finalMap;
     final completer = Completer<void>();
     Timer? timeout;
@@ -256,6 +259,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
             try { timeout?.cancel(); } catch (_) {}
             subStd.cancel();
             completer.complete();
+          }
+        }
+        // Fallback: detect raw HRV header/data/last frames if parser didn't complete
+        if (value.isNotEmpty && value[0] == 57) {
+          final int idx = value.length > 1 ? (value[1] & 0xFF) : -1;
+          // Header frame carries range minutes typically at byte 3
+          if (idx == 0 && value.length > 4) {
+            _hrvHeaderRangeMin = value[3] & 0xFF;
+          }
+          // Last frame index is 4. If parser didn't finalize, print a sleep-style summary
+          if (idx == 4 && !_hrvPrintedFallback && (finalMap == null)) {
+            _hrvPrintedFallback = true;
+            final now = DateTime.now();
+            final target = DateTime(now.year, now.month, now.day).subtract(Duration(days: offset));
+            final dateStr = '${target.year}-${target.month.toString().padLeft(2,'0')}-${target.day.toString().padLeft(2,'0')}';
+            final rangeMin = _hrvHeaderRangeMin ?? 0;
+            print('[HRV][UI] Done $dateStr → points=288, nonZero=unknown, lastFilledSlot=unknown, range=${rangeMin}m');
           }
         }
       } catch (e) {
@@ -282,6 +302,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       final String date = data['date'] as String? ?? '';
       final int range = (data['range'] ?? 0) as int;
       final List hrvArray = (data['hrvArray'] as List?) ?? const [];
+      final int points = hrvArray.length;
       final int nonZero = hrvArray.where((e) => (e is int) && e != 0).length;
       int lastSlot = -1;
       for (int i = hrvArray.length - 1; i >= 0; i--) {
@@ -296,8 +317,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
         lastSlotStr = '$hh:$mm';
       }
       final int totalBytes = (data['totalValues'] ?? 0) as int;
-      print('[HRV][UI] Summary: date=$date, points=288, nonZero=$nonZero, lastFilledSlot=$lastSlot ($lastSlotStr), range=${range}min, bytes=$totalBytes');
-      Snackbar.show(ABC.c, 'HRV $date: 288 pts (nz=$nonZero), range ${range}m', success: true);
+      // Sleep-style final line for HRV
+      print('[HRV][UI] Done $date → points=$points, nonZero=$nonZero, lastFilledSlot=$lastSlotStr, range=${range}m');
+      // Detailed summary line
+      print('[HRV][UI] Summary: date=$date, points=$points, nonZero=$nonZero, lastFilledSlot=$lastSlot ($lastSlotStr), range=${range}m, bytes=$totalBytes');
+      Snackbar.show(ABC.c, 'HRV $date: $points pts (nz=$nonZero), range ${range}m', success: true);
     }
   }
 
@@ -319,8 +343,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
     setState(() => _sleepBusy = true);
     try {
       for (int offset = 0; offset < days; offset++) {
-        await _sleepRequestForOffset(offset);
-        await Future.delayed(const Duration(milliseconds: 250));
+        // Use the same classic per-day path as the working "Get Sleep Data" flow
+        await _fetchAndDisplaySleepData(offset);
+        await Future.delayed(const Duration(milliseconds: 300));
       }
     } finally {
       if (mounted) setState(() => _sleepBusy = false);
@@ -547,12 +572,78 @@ class _DeviceScreenState extends State<DeviceScreen> {
   int _alarmIndex = 0;
   TimeOfDay _alarmTime = const TimeOfDay(hour: 7, minute: 30);
   List<bool> _alarmRepeat = [false, true, true, true, true, true, false]; // Su..Sa
+  List<Map<String, dynamic>> _vendorAlarms = [];
 
   Future<void> _pickAlarmTime() async {
     final picked = await showTimePicker(context: context, initialTime: _alarmTime);
     if (picked != null) {
       setState(() => _alarmTime = picked);
     }
+  }
+
+  String _formatVendorAlarm(Map<String, dynamic> a) {
+    final int minutes = (a['minutes'] ?? 0) as int;
+    final int h = (minutes ~/ 60) % 24;
+    final int m = minutes % 60;
+    final bool en = (a['enabled'] ?? false) as bool;
+    final List<bool> days = (a['repeatDays'] as List<bool>? ?? const []);
+    final String name = (a['content'] ?? '') as String;
+    final String hhmm = '${h.toString().padLeft(2,'0')}:${m.toString().padLeft(2,'0')}';
+    final String rpt = days.isEmpty ? '-' : ['Su','Mo','Tu','We','Th','Fr','Sa'].asMap().entries
+      .where((e)=>e.key < days.length && days[e.key])
+      .map((e)=>e.value).join('');
+    return '${en ? 'ON ' : 'OFF'} $hhmm  $rpt  ${name.isNotEmpty ? name : ''}'.trim();
+  }
+
+  Future<void> _refreshVendorAlarms() async {
+    try {
+      final req = QCBandSDK.buildVendorAlarmRead();
+      final List<Map<String, dynamic>> captured = [];
+      late final StreamSubscription<List<int>> sub;
+      sub = _secondbluetoothCharacteristicNotification.value.listen((value) {
+        if (value.isEmpty || value[0] != 0xBC) return;
+        if (value.length < 6) return;
+        if ((value[1] & 0xFF) != 0x2C) return;
+        final int len = (value[2] & 0xFF) | ((value[3] & 0xFF) << 8);
+        final int start = 6;
+        final int end = (start + len) <= value.length ? (start + len) : value.length;
+        final payload = Uint8List.fromList(value.sublist(start, end));
+        final parsed = QCBandSDK.parseVendorAlarmPayload(payload);
+        if (captured.isEmpty) {
+          captured.addAll(parsed);
+        }
+      });
+      try {
+        await _vendorWrite(req);
+        await Future.delayed(const Duration(milliseconds: 600));
+      } finally {
+        await sub.cancel();
+      }
+      setState(() { _vendorAlarms = captured; });
+    } catch (e) {
+      print('[ALARM][UI] refresh error: $e');
+    }
+  }
+
+  Future<void> _addVendorAlarmFromState({String name = 'Alarm'}) async {
+    final int minutes = _alarmTime.hour * 60 + _alarmTime.minute;
+    final pkt = QCBandSDK.buildVendorAlarmWriteMany([
+      {
+        'minutesSinceMidnight': minutes,
+        'enabled': true,
+        'repeatDays': _alarmRepeat,
+        'content': name,
+      }
+    ]);
+    await _vendorWrite(pkt);
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _refreshVendorAlarms();
+  }
+
+  Future<void> _clearVendorAlarms() async {
+    await _vendorWrite(QCBandSDK.buildVendorAlarmClear());
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _refreshVendorAlarms();
   }
 
   @override
@@ -2310,6 +2401,121 @@ class _DeviceScreenState extends State<DeviceScreen> {
     }
   }
 
+  Future<void> _quickAlarmSetAndVerify({int slotIndex = 1, int minutesAhead = 2}) async {
+    if (_bluetoothCharacteristicWrite == null) {
+      print('[ALARM] Write characteristic not ready');
+      return;
+    }
+    // 0) DND status check (vendor)
+    await _vendorCheckDndAndLog();
+
+    // 1) Sync device time (do this before setting the alarm)
+    try {
+      await _bluetoothCharacteristicWrite.write(QCBandSDK.setDeviceTime(0));
+      await Future.delayed(const Duration(milliseconds: 200));
+    } catch (e) {
+      print('[ALARM] Set time failed: $e');
+    }
+
+    // 2) Compute near-future time (rounded a bit ahead to ensure future)
+    final now = DateTime.now().add(Duration(minutes: minutesAhead));
+    final target = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    // Build vendor alarm write (0xBC 0x2C) for a single repeating daily alarm
+    final int minutesSinceMidnight = target.hour * 60 + target.minute;
+    final vendorSet = QCBandSDK.buildVendorAlarmWriteSingle(
+      minutesSinceMidnight,
+      enabled: true,
+      repeatDays: const [true, true, true, true, true, true, true],
+      content: 'Alarm',
+    );
+    print('[ALARM][VENDOR] → WRITE (bc 2c) minutes=$minutesSinceMidnight ${target.hour.toString().padLeft(2,'0')}:${target.minute.toString().padLeft(2,'0')}');
+    try {
+      await _vendorWrite(vendorSet);
+      await Future.delayed(const Duration(milliseconds: 400));
+    } catch (e) {
+      print('[ALARM][VENDOR] Write failed: $e');
+      return;
+    }
+
+    // 3) Vendor read-back and print
+    await _vendorGetAlarmsLogRaw();
+
+    print('[ALARM] Tip: ensure band DND/Night mode is off. Alarm should trigger at ${target.hour.toString().padLeft(2,'0')}:${target.minute.toString().padLeft(2,'0')}');
+  }
+
+  // Vendor DND read: bc 06 with payload [0x01]
+  Future<void> _vendorCheckDndAndLog() async {
+    try {
+      final payload = Uint8List.fromList([0x01]);
+      final req = ResolveUtil().addHeader(0x06, payload);
+      print('[DND] → READ (vendor bc 06) cmd=${req.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+      final List<String> seen = [];
+      late final StreamSubscription<List<int>> sub;
+      sub = _secondbluetoothCharacteristicNotification.value.listen((value) {
+        if (value.isEmpty || value[0] != 0xBC) return;
+        if (value.length < 6) return;
+        final int action = value[1] & 0xFF;
+        if (action != 0x06) return;
+        final int len = (value[2] & 0xFF) | ((value[3] & 0xFF) << 8);
+        final int start = 6;
+        final int end = (start + len) <= value.length ? (start + len) : value.length;
+        final List<int> subData = value.sublist(start, end);
+        if (seen.isEmpty) {
+          final rawHex = value.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ');
+          print('[DND] ← RAW bc06 len=$len data=${subData.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}  frame=$rawHex');
+          bool enabled = false;
+          int sh = 0, sm = 0, eh = 0, em = 0;
+          if (subData.length >= 6) {
+            // subData[1]: 1=enable, 2=disable (per skylot); times at [2..5]
+            enabled = (subData[1] & 0xFF) == 1;
+            sh = subData[2] & 0xFF;
+            sm = subData[3] & 0xFF;
+            eh = subData[4] & 0xFF;
+            em = subData[5] & 0xFF;
+          }
+          print('[DND] State: enabled=$enabled window=${sh.toString().padLeft(2,'0')}:${sm.toString().padLeft(2,'0')}–${eh.toString().padLeft(2,'0')}:${em.toString().padLeft(2,'0')}');
+          seen.add('done');
+        }
+      });
+      try {
+        await _vendorWrite(req);
+        await Future.delayed(const Duration(milliseconds: 1200));
+      } finally {
+        await sub.cancel();
+      }
+    } catch (e) {
+      print('[DND] Error: $e');
+    }
+  }
+
+  // Vendor alarm get (bc 2c, payload [0x01])
+  Future<void> _vendorGetAlarmsLogRaw() async {
+    try {
+      final req = ResolveUtil().addHeader(0x2C, Uint8List.fromList([0x01]));
+      print('[ALARM][VENDOR] → GET (bc 2c) cmd=${req.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+      late final StreamSubscription<List<int>> sub;
+      sub = _secondbluetoothCharacteristicNotification.value.listen((value) {
+        if (value.isEmpty || value[0] != 0xBC) return;
+        if (value.length < 6) return;
+        final int action = value[1] & 0xFF;
+        if (action != 0x2C) return;
+        final int len = (value[2] & 0xFF) | ((value[3] & 0xFF) << 8);
+        final int start = 6;
+        final int end = (start + len) <= value.length ? (start + len) : value.length;
+        final List<int> payload = value.sublist(start, end);
+        print('[ALARM][VENDOR] ← bc2c len=$len payload=${payload.map((e)=>e.toRadixString(16).padLeft(2,'0')).join(' ')}');
+      });
+      try {
+        await _vendorWrite(req);
+        await Future.delayed(const Duration(milliseconds: 1500));
+      } finally {
+        await sub.cancel();
+      }
+    } catch (e) {
+      print('[ALARM][VENDOR] GET error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
@@ -2759,6 +2965,54 @@ class _DeviceScreenState extends State<DeviceScreen> {
               TextButton(
                 onPressed: getAlarms,
                 child: Text('Get Alarm'),
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => _quickAlarmSetAndVerify(slotIndex: 1, minutesAhead: 2),
+                    child: const Text('Quick Alarm +120s (Slot 1)'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => _quickAlarmSetAndVerify(slotIndex: 2, minutesAhead: 2),
+                    child: const Text('Quick Alarm +120s (Slot 2)'),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      ElevatedButton(
+                        onPressed: _refreshVendorAlarms,
+                        child: const Text('Refresh Vendor Alarms'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => _addVendorAlarmFromState(name: 'Alarm'),
+                        child: const Text('Add Vendor Alarm'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: _clearVendorAlarms,
+                        child: const Text('Clear All Vendor Alarms'),
+                      ),
+                    ]),
+                    const SizedBox(height: 6),
+                    if (_vendorAlarms.isEmpty)
+                      const Text('No vendor alarms')
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _vendorAlarms.map((a) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                          child: Text(_formatVendorAlarm(a)),
+                        )).toList(),
+                      ),
+                  ],
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0),

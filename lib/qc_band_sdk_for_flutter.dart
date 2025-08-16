@@ -374,6 +374,109 @@ class QCBandSDK {
   }
 
   // ================= Vendor Serial (0xBC) helpers and Sport+ =================
+  // -------- Vendor Alarms (0x2C) --------
+  // Repeat bit mask helper: bits 0..6 = Su..Sa, bit7 = enabled flag
+  static int _encodeRepeatAndEnable({required bool enabled, required List<bool> repeatDays}) {
+    int mask = 0;
+    for (int i = 0; i < repeatDays.length && i < 7; i++) {
+      if (repeatDays[i]) mask |= (1 << i);
+    }
+    if (enabled) mask |= 0x80;
+    return mask & 0xFF;
+  }
+
+  // Build vendor read alarms request (payload [0x01])
+  static Uint8List buildVendorAlarmRead() {
+    return buildVendorPacket(0x2C, Uint8List.fromList([0x01]));
+  }
+
+  // Build vendor write alarms request for a single alarm scheduled at minutes since midnight
+  // repeatDays order: [Su, Mo, Tu, We, Th, Fr, Sa]
+  static Uint8List buildVendorAlarmWriteSingle(
+    int minutesSinceMidnight, {
+    bool enabled = true,
+    List<bool>? repeatDays,
+    String content = '',
+  }) {
+    final List<bool> days = repeatDays ?? const [true, true, true, true, true, true, true];
+    final int re = _encodeRepeatAndEnable(enabled: enabled, repeatDays: days);
+    final int minLo = minutesSinceMidnight & 0xFF;
+    final int minHi = (minutesSinceMidnight >> 8) & 0xFF;
+    final List<int> nameBytes = content.isEmpty ? <int>[] : utf8.encode(content);
+    final int alarmLen = 4 + nameBytes.length;
+
+    // payload: [0x02, total=1] + [len, repeatAndEnable, minLo, minHi, content...]
+    final List<int> payload = [0x02, 0x01, alarmLen & 0xFF, re, minLo, minHi, ...nameBytes];
+    return buildVendorPacket(0x2C, Uint8List.fromList(payload));
+  }
+
+  // Build vendor write for many alarms at once. Each item expects keys:
+  //  - minutesSinceMidnight (int)
+  //  - enabled (bool)
+  //  - repeatDays (List<bool> len<=7, order Su..Sa)
+  //  - content (String, optional)
+  static Uint8List buildVendorAlarmWriteMany(List<Map<String, dynamic>> alarms) {
+    final int total = alarms.length & 0xFF;
+    List<int> payload = [0x02, total];
+    for (final a in alarms) {
+      final int minutes = (a['minutesSinceMidnight'] ?? 0) as int;
+      final bool enabled = (a['enabled'] ?? true) as bool;
+      final List<bool> repeatDays = (a['repeatDays'] as List<bool>?) ?? const [true, true, true, true, true, true, true];
+      final String content = (a['content'] ?? '') as String;
+      final int re = _encodeRepeatAndEnable(enabled: enabled, repeatDays: repeatDays);
+      final List<int> nameBytes = content.isEmpty ? <int>[] : utf8.encode(content);
+      final int alarmLen = 4 + nameBytes.length;
+      payload.addAll([alarmLen & 0xFF, re, minutes & 0xFF, (minutes >> 8) & 0xFF]);
+      if (nameBytes.isNotEmpty) payload.addAll(nameBytes);
+    }
+    return buildVendorPacket(0x2C, Uint8List.fromList(payload));
+  }
+
+  // Build vendor write clearing all alarms (total=0)
+  static Uint8List buildVendorAlarmClear() {
+    return buildVendorPacket(0x2C, Uint8List.fromList([0x02, 0x00]));
+  }
+
+  // Parse vendor alarm payload (payload bytes only, not including 0xBC header)
+  // Returns a list of maps: { minutes: int, enabled: bool, repeatDays: List<bool>(7), content: String }
+  static List<Map<String, dynamic>> parseVendorAlarmPayload(Uint8List payload) {
+    final List<Map<String, dynamic>> out = [];
+    if (payload.isEmpty) return out;
+    // Expect [readFlag(1)=1][total(1)][alarmLen][repeatAndEnable][minLo][minHi][content...][nextAlarmLen]...
+    int idx = 0;
+    final int readFlag = payload[idx] & 0xFF; idx += (idx < payload.length ? 1 : 0);
+    final int total = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx += (idx < payload.length ? 1 : 0);
+    if (readFlag != 1 || total == 0) return out;
+    for (int i = 0; i < total; i++) {
+      if (idx >= payload.length) break;
+      final int alarmLen = payload[idx] & 0xFF; idx++;
+      if (idx + alarmLen - 1 > payload.length) {
+        // malformed
+        break;
+      }
+      final int re = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx++;
+      final int minLo = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx++;
+      final int minHi = (idx < payload.length) ? (payload[idx] & 0xFF) : 0; idx++;
+      final int minutes = (minHi << 8) | minLo;
+      // Remaining bytes for this alarm: content
+      final int contentLen = (alarmLen > 4) ? (alarmLen - 4) : 0;
+      String content = '';
+      if (contentLen > 0 && idx + contentLen <= payload.length) {
+        content = utf8.decode(payload.sublist(idx, idx + contentLen), allowMalformed: true);
+      }
+      idx += contentLen;
+      final bool enabled = (re & 0x80) != 0;
+      final List<bool> days = List<bool>.generate(7, (d) => ((re >> d) & 0x01) != 0);
+      out.add({
+        'minutes': minutes,
+        'enabled': enabled,
+        'repeatDays': days,
+        'content': content,
+      });
+    }
+    return out;
+  }
+
   // Build vendor packet using ResolveUtil.addHeader
   static Uint8List buildVendorPacket(int cmd, [Uint8List? payload]) {
     return ResolveUtil().addHeader(cmd, payload);
