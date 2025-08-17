@@ -444,8 +444,9 @@ class SleepParser {
           
           // Convert raw minutes to hour:minute format
           
-          // Calculate base date for this sleep session
-          DateTime today = DateTime.utc(2025, 8, 5);
+          // Calculate base date for this sleep session using real local date (midnight)
+          final DateTime nowLocal = DateTime.now();
+          final DateTime today = DateTime(nowLocal.year, nowLocal.month, nowLocal.day);
           DateTime sleepDate = today.subtract(Duration(days: currentIndex));
           
           // Handle overnight sleep (if start > 18:00, sleep started previous day)
@@ -702,10 +703,10 @@ class SleepParser {
 
   // Extract BCD-encoded date from packet
   DateTime _extractBCDDate() {
-    // For now, use current date - could be enhanced to parse from packet
-    DateTime today = DateTime.utc(2025, 8, 5);
-    today = today.subtract(Duration(days: currentIndex));
-          // Using calculated date for day $currentIndex
+    // Use real local date (midnight) minus currentIndex days
+    final DateTime nowLocal = DateTime.now();
+    final DateTime today = DateTime(nowLocal.year, nowLocal.month, nowLocal.day)
+        .subtract(Duration(days: currentIndex));
     return today;
   }
 

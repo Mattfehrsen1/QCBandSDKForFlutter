@@ -49,6 +49,8 @@ class SleepHandler implements MetricHandler {
   
   // Day configuration for data retrieval (following SpO2 handler pattern)
   int _daysBack = 7; // Default: get last 7 days of data
+  // Logging behavior
+  bool _summaryOnlyLogging = false; // If true, suppress detailed logs and print summaries only
   
   // Device ID for database storage
   String get _deviceId => _bleManager.connectedDeviceId ?? 'unknown-device';
@@ -64,6 +66,11 @@ class SleepHandler implements MetricHandler {
     required QcBleManager bleManager,
     required PenngDatabase database,
   }) : _bleManager = bleManager, _database = database;
+
+  // Configure logging verbosity (true = summary only)
+  void setSummaryOnlyLogging(bool value) {
+    _summaryOnlyLogging = value;
+  }
 
   @override
   String get metricName => 'sleep';
@@ -597,6 +604,8 @@ class SleepHandler implements MetricHandler {
         if (summary.bedTime != null && summary.wakeTime != null) {
           await _storeSleepSession(summary);
           _log('✅ Sleep data parsed and stored for day $dayOffset');
+          // Print device_screen-style summary banner for this day
+          _displaySleepSummary(summary, dayOffset);
         } else {
           _log('⚠️ Day $dayOffset: Device returned packet but no valid sleep session found');
         }
@@ -1533,16 +1542,16 @@ class SleepHandler implements MetricHandler {
   void _displaySleepSummary(SleepSummary summary, int dayIndex) {
     final dayLabel = _getDayLabel(dayIndex);
     
-    _log('\n📊 Sleep Summary - $dayLabel (Day $dayIndex):');
-    _log('  🛏️  Bed Time: ${_formatTime(summary.bedTime!)}');
-    _log('  🌅 Wake Time: ${_formatTime(summary.wakeTime!)}');
-    _log('  ⏱️  Total Sleep: ${summary.durations['totalDuration']} minutes');
-    _log('  📈 Sleep Stage Breakdown:');
-    _log('    💤 Deep Sleep: ${summary.durations['deepSleep']} min');
-    _log('    😴 Light Sleep: ${summary.durations['lightSleep']} min');
-    _log('    👁️  REM Sleep: ${summary.durations['rapidEyeMovement']} min');
-    _log('    😵 Awake: ${summary.durations['awake']} min');
-    _log('  🔄 Total Segments: ${summary.segments.length}');
+    _log('\n📊 Sleep Summary - $dayLabel (Day $dayIndex):', force: true);
+    _log('  🛏️  Bed Time: ${_formatTime(summary.bedTime!)}', force: true);
+    _log('  🌅 Wake Time: ${_formatTime(summary.wakeTime!)}', force: true);
+    _log('  ⏱️  Total Sleep: ${summary.durations['totalDuration']} minutes', force: true);
+    _log('  📈 Sleep Stage Breakdown:', force: true);
+    _log('    💤 Deep Sleep: ${summary.durations['deepSleep']} min', force: true);
+    _log('    😴 Light Sleep: ${summary.durations['lightSleep']} min', force: true);
+    _log('    👁️  REM Sleep: ${summary.durations['rapidEyeMovement']} min', force: true);
+    _log('    😵 Awake: ${summary.durations['awake']} min', force: true);
+    _log('  🔄 Total Segments: ${summary.segments.length}', force: true);
   }
 
   String _getDayLabel(int dayIndex) {
@@ -1575,7 +1584,10 @@ class SleepHandler implements MetricHandler {
     );
   }
 
-  void _log(String message) => debugPrint('[SleepHandler] $message');
+  void _log(String message, {bool force = false}) {
+    if (_summaryOnlyLogging && !force) return;
+    debugPrint('[SleepHandler] $message');
+  }
 
   // FIFO cache add with size cap
   void _cacheAdd(LinkedHashSet<String> set, String key) {
