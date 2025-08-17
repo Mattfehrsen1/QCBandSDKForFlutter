@@ -340,6 +340,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Future<void> _getSleepNDays(int days) async {
     if (_sleepBusy) return;
+    // Match the 7-day flow: print start/end banners and 300ms pacing
+    print("🌙 Fetching sleep data for ${days} day${days == 1 ? '' : 's'}...");
     setState(() => _sleepBusy = true);
     try {
       for (int offset = 0; offset < days; offset++) {
@@ -347,6 +349,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
         await _fetchAndDisplaySleepData(offset);
         await Future.delayed(const Duration(milliseconds: 300));
       }
+      print("✅ Sleep data collection complete!");
     } finally {
       if (mounted) setState(() => _sleepBusy = false);
     }
