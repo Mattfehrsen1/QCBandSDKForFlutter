@@ -8,8 +8,10 @@ import 'dart:async'; // Required for StreamController if used elsewhere
 // Helper to convert 4 little-endian bytes to int (Unix timestamp)
 // This should be accessible to ReadHeartRateResponse
 int bytesToLittleEndianInt(Uint8List bytes, int offset) {
-  final byteData = ByteData.view(bytes.buffer, offset, 4);
-  return byteData.getInt32(0, Endian.little);
+  // Use sublist view to respect the Uint8List's internal offset
+  final byteData = ByteData.sublistView(bytes, offset, offset + 4);
+  // Read as unsigned to avoid negative timestamps when MSB is set
+  return byteData.getUint32(0, Endian.little);
 }
 
 // Represents the parsed heart rate response for a full day (aligned with app protocol)
@@ -77,9 +79,8 @@ class ReadHeartRateResponse {
       if (data.length >= 6) {
         // LE timestamp at bytes [2..5]
         final ts = bytesToLittleEndianInt(Uint8List.sublistView(data, 2, 6), 0);
-        // Align with app: subtract local timezone to get UTC-like seconds
-        final int tzOffsetSec = DateTime.now().timeZoneOffset.inSeconds;
-        mUtcTime = ts - tzOffsetSec;
+        // Device provides epoch seconds; store as-is (UTC seconds)
+        mUtcTime = ts;
         // Copy remaining payload starting at byte 6
         final payload = data.sublist(6);
         _copyIntoRaw(payload);
