@@ -38,6 +38,21 @@ class ReadHeartRateResponse {
     final int sub = data.length > 1 ? (data[1] & 0xFF) : 0xFF;
 
     // Early termination frames: in production app, 0xFF or (today and 0x17) can signal end
+    // Handle special "today terminator" 0x17 to avoid hanging on today's history
+    if (sub == 0x17) {
+      if (mUtcTime != null) {
+        final dtLocal = DateTime.fromMillisecondsSinceEpoch(mUtcTime! * 1000, isUtc: true).toLocal();
+        final nowLocal = DateTime.now();
+        final bool isSameLocalDay = dtLocal.year == nowLocal.year && dtLocal.month == nowLocal.month && dtLocal.day == nowLocal.day;
+        if (isSameLocalDay) {
+          _finalizeToDailyArray();
+          _complete = true;
+          return true;
+        }
+      }
+      // If timestamp/day unknown yet, fall through and wait for normal completion
+    }
+
     if (sub == 0xFF) {
       _finalizeToDailyArray();
       _complete = true;

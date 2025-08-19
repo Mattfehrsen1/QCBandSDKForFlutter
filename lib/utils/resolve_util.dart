@@ -482,6 +482,13 @@ class ResolveUtil {
       final bool done = hrResponse.acceptData(data);
       if (done || hrResponse.isComplete) {
         _ongoingHrResponses.remove(currentDayKey);
+        // Debug: log completion with local date and non-zero sample count
+        try {
+          final int ts = (hrResponse.mUtcTime ?? 0);
+          final DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true).toLocal();
+          final int nz = hrResponse.mHeartRateArray.where((v) => v > 0).length;
+          print('[HR] DONE date=${dt.toIso8601String()} nonZero=$nz rangeMin=${hrResponse.range}');
+        } catch (_) {}
         return {
           DeviceKey.DataType: 'HeartRateData',
           DeviceKey.End: true,
