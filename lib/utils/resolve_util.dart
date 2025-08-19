@@ -488,33 +488,30 @@ class ResolveUtil {
           final DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true).toLocal();
           final int nz = hrResponse.mHeartRateArray.where((v) => v > 0).length;
           print('[HR] DONE date=${dt.toIso8601String()} nonZero=$nz rangeMin=${hrResponse.range}');
-          // Print a morning window (06:00-12:00 local) of time=bpm pairs for quick inspection
-          final int startHour = 6;
-          final int endHour = 12; // exclusive
-          final int startIdx = ((startHour * 60) ~/ 5);
-          final int endIdx = ((endHour * 60) ~/ 5);
-          int printed = 0;
-          final StringBuffer sb = StringBuffer();
-          for (int idx = startIdx; idx < endIdx && idx < hrResponse.mHeartRateArray.length; idx++) {
-            final int minutes = idx * 5;
-            final int hh = minutes ~/ 60;
-            final int mm = minutes % 60;
-            final int v = hrResponse.mHeartRateArray[idx];
-            if (v > 0) {
-              if (printed == 0) {
-                final String dateStr = '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-                print('[HR] Morning window $dateStr 06:00-12:00 (non-zero samples):');
+          // Print the whole day's non-zero samples, grouped by hour for readability
+          final String dateStr = '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+          print('[HR] Day window $dateStr 00:00-24:00 (non-zero samples by hour):');
+          int totalPrinted = 0;
+          for (int hour = 0; hour < 24; hour++) {
+            final int startIdx = ((hour * 60) ~/ 5);
+            final int endIdx = (((hour + 1) * 60) ~/ 5);
+            final StringBuffer line = StringBuffer();
+            for (int idx = startIdx; idx < endIdx && idx < hrResponse.mHeartRateArray.length; idx++) {
+              final int minutes = idx * 5;
+              final int mm = minutes % 60;
+              final int v = hrResponse.mHeartRateArray[idx];
+              if (v > 0) {
+                if (line.isNotEmpty) line.write(', ');
+                line.write('${hour.toString().padLeft(2,'0')}:${mm.toString().padLeft(2,'0')}=$v');
+                totalPrinted++;
               }
-              sb.write('${hh.toString().padLeft(2,'0')}:${mm.toString().padLeft(2,'0')}=$v');
-              printed++;
-              if (idx < endIdx - 1) sb.write(', ');
+            }
+            if (line.isNotEmpty) {
+              print('[HR] $dateStr ${hour.toString().padLeft(2,'0')}: $line');
             }
           }
-          if (printed > 0) {
-            print(sb.toString());
-          } else {
-            final String dateStr = '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-            print('[HR] Morning window $dateStr 06:00-12:00: no non-zero samples');
+          if (totalPrinted == 0) {
+            print('[HR] $dateStr: no non-zero samples for the entire day');
           }
         } catch (_) {}
         return {
